@@ -29,6 +29,8 @@ cp .env.example .env.development
 | --- | --- | --- | --- |
 | `OPENAI_API_KEY` | — | Yes | OpenAI API key |
 | `DEFAULT_LLM_MODEL` | `gpt-5-mini` | No | Starting model — see [LLM Service](llm-service.md) for fallback order |
+| `DASHSCOPE_API_KEY` | — | No | Alibaba Cloud Model Studio key when using a Qwen chat model |
+| `DASHSCOPE_BASE_URL` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | No | DashScope OpenAI-compatible endpoint for your API key's region |
 | `DEFAULT_LLM_TEMPERATURE` | `0.2` | No | Temperature for chat completions |
 | `MAX_TOKENS` | `2000` | No | Max tokens per LLM response |
 | `MAX_LLM_CALL_RETRIES` | `3` | No | Retries per model before switching to fallback |

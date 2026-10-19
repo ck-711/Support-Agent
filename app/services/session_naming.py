@@ -16,6 +16,7 @@ from sqlmodel import (
     update,
 )
 
+from app.core.config import settings
 from app.core.logging import logger
 from app.core.metrics import session_names_generated_total
 from app.core.prompts import SESSION_TITLE_PROMPT
@@ -52,16 +53,22 @@ def _claim_session(session_id: str, placeholder: str) -> bool:
 
 async def _persist_session_name(session_id: str, user_message: str) -> None:
     try:
+        model_name = (
+            settings.DEFAULT_LLM_MODEL
+            if settings.DEFAULT_LLM_MODEL.startswith("qwen-")
+            else "gpt-5.4-nano"
+        )
+        model_kwargs = {} if model_name.startswith("qwen-") else {"reasoning": {"effort": "low"}}
         result = await llm_service.call(
             [
                 SystemMessage(content=SESSION_TITLE_PROMPT),
                 HumanMessage(content=user_message[:500]),
             ],
-            model_name="gpt-5.4-nano",
+            model_name=model_name,
             response_format=SessionTitle,
-            reasoning={"effort": "low"},
             max_tokens=32,
             temperature=0.3,
+            **model_kwargs,
         )
         await database_service.update_session_name(session_id, result.title)
         session_names_generated_total.labels(status="success").inc()

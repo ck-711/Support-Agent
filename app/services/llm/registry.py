@@ -14,10 +14,9 @@ from app.core.config import settings
 from app.core.logging import logger
 
 _API_KEY = SecretStr(settings.OPENAI_API_KEY)
+_DASHSCOPE_API_KEY = SecretStr(settings.DASHSCOPE_API_KEY)
 
-# Every model here is a reasoning model, and the API rejects the classic sampling
-# knobs (`top_p`, `presence_penalty`, `frequency_penalty`) with a 400 once
-# `reasoning` is set. Tune quality with `reasoning.effort` instead.
+# OpenAI reasoning models reject classic sampling knobs once `reasoning` is set.
 
 
 def _is_openai_model(model: str) -> bool:
@@ -58,7 +57,7 @@ class LLMRegistry:
     """
 
     # Ordered by preference: index 0 is the default and the head of the circular
-    # fallback chain, so it degrades newest -> cheapest.
+    # fallback chain.
     #
     # `model` is passed straight to `init_chat_model`, so an entry for another
     # provider only needs a "provider:model" string here, e.g.
@@ -94,6 +93,26 @@ class LLMRegistry:
             "kwargs": {
                 "max_completion_tokens": settings.MAX_TOKENS,
                 "reasoning": {"effort": "low"},
+            },
+        },
+        {
+            "name": "qwen-plus",
+            "model": "openai:qwen-plus",
+            "kwargs": {
+                "api_key": _DASHSCOPE_API_KEY,
+                "base_url": settings.DASHSCOPE_BASE_URL,
+                "max_tokens": settings.MAX_TOKENS,
+                "extra_body": {"enable_thinking": False},
+            },
+        },
+        {
+            "name": "qwen-max",
+            "model": "openai:qwen-max",
+            "kwargs": {
+                "api_key": _DASHSCOPE_API_KEY,
+                "base_url": settings.DASHSCOPE_BASE_URL,
+                "max_tokens": settings.MAX_TOKENS,
+                "extra_body": {"enable_thinking": False},
             },
         },
     ]
@@ -136,10 +155,12 @@ class LLMRegistry:
                 model=config["model"],
                 custom_args=list(kwargs.keys()),
             )
-            override_kwargs: Dict[str, Any] = dict(kwargs)
-            if _is_openai_model(config["model"]):
-                # ponytail: carries the token limit but not per-entry `reasoning`;
-                # add that here if a caller ever needs to override a reasoning model.
+            override_kwargs: Dict[str, Any] = dict(config.get("kwargs", {}))
+            override_kwargs.update(kwargs)
+            if _is_openai_model(config["model"]) and not {
+                "max_tokens",
+                "max_completion_tokens",
+            }.intersection(override_kwargs):
                 override_kwargs.setdefault("max_completion_tokens", settings.MAX_TOKENS)
             return _build_llm(config["model"], **override_kwargs)
 

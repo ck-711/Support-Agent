@@ -5,7 +5,7 @@
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/) — `pip install uv`
 - Docker + Docker Compose (recommended for local dev)
-- OpenAI API key
+- OpenAI API key, or Alibaba Cloud Model Studio API key when using Qwen
 - Langfuse account (optional — set `LANGFUSE_TRACING_ENABLED=false` to skip)
 
 ## Option A: Docker (recommended)
@@ -18,7 +18,7 @@ cd my-agent
 
 # Copy and fill in your env file
 cp .env.example .env.development
-# Required: OPENAI_API_KEY, JWT_SECRET_KEY
+# Required: JWT_SECRET_KEY and a provider key (OPENAI_API_KEY or DASHSCOPE_API_KEY for Qwen)
 # Optional: LANGFUSE_* keys (or set LANGFUSE_TRACING_ENABLED=false)
 
 make install       # installs Python deps + pre-commit hooks
@@ -35,7 +35,7 @@ git clone <repo-url> my-agent
 cd my-agent
 
 cp .env.example .env.development
-# Fill in: OPENAI_API_KEY, JWT_SECRET_KEY, POSTGRES_* (point to your DB)
+# Fill in: provider API key, JWT_SECRET_KEY, POSTGRES_* (point to your DB)
 
 make install       # installs deps + pre-commit hooks
 make migrate       # creates tables via Alembic

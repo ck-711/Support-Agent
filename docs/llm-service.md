@@ -19,8 +19,12 @@ Models are defined in `LLMRegistry.LLM_CONFIGS` in order of preference:
 | `gpt-5.4`      | gpt-5.4      | Medium reasoning effort.           |
 | `gpt-5.4-mini` | gpt-5.4-mini | Low reasoning effort.              |
 | `gpt-5.4-nano` | gpt-5.4-nano | Fast, low reasoning effort.        |
+| `qwen-plus` | qwen-plus | Alibaba Cloud Model Studio; tool calling supported. |
+| `qwen-max` | qwen-max | Alibaba Cloud Model Studio; tool calling supported. |
 
 Set `DEFAULT_LLM_MODEL` in your `.env` to choose the starting model.
+
+For Qwen, set `DASHSCOPE_API_KEY` and choose `qwen-plus` or `qwen-max` as `DEFAULT_LLM_MODEL`. The default `DASHSCOPE_BASE_URL` is for mainland China; the API key and endpoint must use the same region. `OPENAI_API_KEY` remains separate and is used by the current mem0 memory and evaluation integrations.
 
 Every entry is built through LangChain's `init_chat_model`. A bare `model` name (like the ones above) is inferred as OpenAI, so existing entries and env vars keep working unchanged. To add a model from another provider, prefix `model` with `provider:`, e.g.:
 
