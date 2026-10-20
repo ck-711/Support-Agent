@@ -26,6 +26,16 @@ class SupportConversation(SQLModel, table=True):
     expires_at: datetime = Field(default_factory=lambda: now_utc() + timedelta(days=30), index=True)
 
 
+class SupportSteamAccount(SQLModel, table=True):
+    """Steam identity proven by an app-specific Steamworks authentication ticket."""
+
+    __tablename__ = "support_steam_account"  # pyright: ignore[reportAssignmentType]
+
+    user_id: int = Field(primary_key=True, foreign_key="user.id")
+    steam_id: str = Field(unique=True, index=True, max_length=20)
+    verified_at: datetime = Field(default_factory=now_utc)
+
+
 class SupportMessage(SQLModel, table=True):
     """A player, assistant, or staff message."""
 

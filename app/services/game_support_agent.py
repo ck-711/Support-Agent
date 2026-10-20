@@ -5,6 +5,7 @@ import json
 import re
 from typing import Any, TypedDict, cast
 
+import httpx
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables.config import RunnableConfig
@@ -22,6 +23,7 @@ from app.services.llm.registry import LLMRegistry
 from app.services.support_documents_v2 import RetrievedPassage, search_documents, search_support_vectors
 from app.services.support_images_v2 import search_images
 from app.services.support_tools import TOOL_SCHEMAS, execute_support_tool
+from app.services.steam_api import SteamUnavailable
 
 
 class SupportAnswer(BaseModel):
@@ -46,6 +48,7 @@ class SupportState(TypedDict, total=False):
     tool_ticket_id: str | None
     tool_tickets: list[dict[str, str]]
     tool_answered: bool
+    tool_steam: dict[str, Any]
     answer: str
     sources: list[SourceReference]
     needs_ticket: bool
@@ -70,7 +73,7 @@ TOPIC_TERMS = {
 }
 ISSUE_TERMS = (
     "crash", "crashes", "freezes", "not working", "did not unlock", "doesn't unlock",
-    "lost my save", "save disappeared", "崩溃", "卡死", "无法解锁", "存档丢失",
+    "lost my save", "save disappeared", "崩溃", "卡死", "无法解锁", "没有解锁", "未解锁", "存档丢失",
     "se bloquea", "no se desbloquea", "perdí mi partida",
 )
 HIGH_RISK_TERMS = (
@@ -83,15 +86,18 @@ TICKET_STATUS_TERMS = (
     "我的工单", "工单状态", "报告进度", "我的报告", "my ticket", "ticket status",
     "my report", "report status", "mis tickets", "mis informes", "estado de mi informe",
 )
+STEAM_NEWS_TERMS = ("steam news", "steam announcement", "latest update", "steam 公告", "steam 新闻", "最新公告", "最新更新")
+STEAM_OWNERSHIP_TERMS = ("do i own", "my ownership", "我的游戏归属", "我拥有", "我购买")
+STEAM_ACHIEVEMENT_TERMS = ("my achievements", "my steam achievements", "我的成就", "我已解锁")
 
 
 def classify_handoff(question: str, answer: SupportState) -> str | None:
     """Route sensitive, complex, and unsupported requests to a human."""
     lowered = question.casefold()
-    if answer.get("tool_answered"):
-        return None
     if any(term in lowered for term in HIGH_RISK_TERMS):
         return "high_risk"
+    if answer.get("tool_answered"):
+        return None
     if any(term in lowered for term in COMPLEX_TERMS):
         return "complex"
     if answer.get("needs_ticket") or (not answer.get("sources") and len(question.strip()) >= 10):
@@ -187,6 +193,23 @@ async def _call_tools(state: SupportState) -> SupportState:
     conversation_id = state.get("conversation_id")
     if not conversation_id:
         return {}
+    lowered = state.get("question", "").casefold()
+    steam_tool = None
+    if any(term in lowered for term in STEAM_NEWS_TERMS):
+        steam_tool = "get_steam_news"
+    elif any(term in lowered for term in STEAM_OWNERSHIP_TERMS):
+        steam_tool = "check_my_steam_ownership"
+    elif any(term in lowered for term in STEAM_ACHIEVEMENT_TERMS):
+        steam_tool = "get_my_steam_achievements"
+    if steam_tool and not _reported_issue(state.get("question", "")):
+        try:
+            value = await execute_support_tool(steam_tool, {}, conversation_id)
+            return {"tool_steam": {"name": steam_tool, "result": value}}
+        except ValueError as exc:
+            return {"tool_steam": {"name": steam_tool, "error": str(exc)}}
+        except (SteamUnavailable, httpx.TransportError):
+            logger.exception("steam_support_lookup_failed", tool_name=steam_tool)
+            return {"tool_steam": {"name": steam_tool, "error": "Steam is temporarily unavailable"}}
     if any(term in state.get("question", "").casefold() for term in TICKET_STATUS_TERMS):
         try:
             tickets = await execute_support_tool("list_my_tickets", {}, conversation_id)
@@ -201,7 +224,9 @@ async def _call_tools(state: SupportState) -> SupportState:
                 SystemMessage(content=(
                     "You may call support tools when needed. Use search_knowledge for missing facts, "
                     "list_my_tickets for the player's ticket status, and request_human_handoff "
-                    "for unresolved, complex, or high-risk requests. Never promise account, payment, "
+                    "for unresolved, complex, or high-risk requests. Use get_steam_news for current announcements; "
+                    "check_my_steam_ownership and get_my_steam_achievements only for the linked player. "
+                    "Never promise account, payment, "
                     "refund, or save changes. Do not call handoff for simple factual questions."
                 )),
                 HumanMessage(content=state.get("question", "")),
@@ -218,8 +243,16 @@ async def _call_tools(state: SupportState) -> SupportState:
                     ticket_id = str(value["ticket_id"])
                 if call["name"] == "list_my_tickets":
                     tool_tickets = value["tickets"]
-            except ValueError:
+                if call["name"] in {"get_steam_news", "check_my_steam_ownership", "get_my_steam_achievements"}:
+                    return {"tool_steam": {"name": call["name"], "result": value}}
+            except ValueError as exc:
                 logger.exception("support_tool_rejected", tool_name=call["name"])
+                if call["name"] in {"check_my_steam_ownership", "get_my_steam_achievements"}:
+                    return {"tool_steam": {"name": call["name"], "error": str(exc)}}
+            except (SteamUnavailable, httpx.TransportError):
+                logger.exception("steam_support_lookup_failed", tool_name=call["name"])
+                if call["name"] in {"get_steam_news", "check_my_steam_ownership", "get_my_steam_achievements"}:
+                    return {"tool_steam": {"name": call["name"], "error": "Steam is temporarily unavailable"}}
         result: SupportState = {"tool_context": json.dumps(outputs, ensure_ascii=False), "tool_ticket_id": ticket_id}
         if tool_tickets is not None:
             result["tool_tickets"] = tool_tickets
@@ -232,6 +265,8 @@ async def _call_tools(state: SupportState) -> SupportState:
 async def _answer(state: SupportState) -> SupportState:
     """Generate a grounded answer with Langfuse callbacks on the graph run."""
     language = state.get("language", "en")
+    if "tool_steam" in state:
+        return _steam_answer(state["tool_steam"], language)
     if "tool_tickets" in state:
         tickets = state["tool_tickets"]
         if not tickets:
@@ -295,6 +330,44 @@ async def _answer(state: SupportState) -> SupportState:
         "needs_ticket": response.needs_ticket or response.unresolved,
         "tool_ticket_id": state.get("tool_ticket_id"),
     }
+
+
+def _steam_answer(tool: dict[str, Any], language: str) -> SupportState:
+    """Render verified Steam data directly so it is not lost behind RAG citation rules."""
+    error = tool.get("error")
+    if error:
+        return {"answer": str(error), "sources": [], "needs_ticket": False, "tool_answered": True}
+    name = tool["name"]
+    result = tool["result"]
+    if name == "get_steam_news":
+        news = result["news"]
+        if not news:
+            message = {"zh": "Steam 目前没有返回这款游戏的公告。", "en": "Steam returned no announcements for this game.",
+                       "es": "Steam no devolvió anuncios para este juego."}
+            return {"answer": message.get(language, message["en"]), "sources": [], "needs_ticket": False,
+                    "tool_answered": True}
+        lines = [f"{item['title']} — {item['url']}" for item in news]
+        heading = {"zh": "Steam 最新公告：", "en": "Latest Steam announcements:", "es": "Últimos anuncios de Steam:"}
+        sources = [SourceReference(title=str(item["title"]), url=str(item["url"])) for item in news]
+        return {"answer": heading.get(language, heading["en"]) + "\n" + "\n".join(lines),
+                "sources": sources, "needs_ticket": False, "tool_answered": True}
+    if name == "check_my_steam_ownership":
+        owned = result["owns_game"]
+        messages = {
+            "zh": "Steam 当前显示你关联的账号拥有 DOTS Survivors。" if owned else "Steam 当前未确认你关联的账号拥有 DOTS Survivors。",
+            "en": "Steam currently confirms your linked account owns DOTS Survivors." if owned else "Steam does not currently confirm ownership for your linked account.",
+            "es": "Steam confirma que tu cuenta vinculada posee DOTS Survivors." if owned else "Steam no confirma la propiedad para tu cuenta vinculada.",
+        }
+        return {"answer": messages.get(language, messages["en"]), "sources": [], "needs_ticket": False,
+                "tool_answered": True}
+    achievements = result["achievements"]
+    unlocked = result["unlocked_total"]
+    heading = {"zh": "Steam 成就（已解锁 {count}/{total}）：", "en": "Steam achievements (unlocked {count}/{total}):",
+               "es": "Logros de Steam (desbloqueados {count}/{total}):"}
+    lines = [f"{'✓' if item['unlocked'] else '○'} {item['title'] or item['name']}" for item in achievements]
+    return {"answer": heading.get(language, heading["en"]).format(count=unlocked, total=result["total"])
+            + ("\n" + "\n".join(lines) if lines else ""), "sources": [], "needs_ticket": False,
+            "tool_answered": True}
 
 
 def build_support_graph() -> CompiledStateGraph:

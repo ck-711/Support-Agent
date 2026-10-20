@@ -17,6 +17,7 @@
 | 统一文档知识库 | 手工编写正文，以及 TXT、MD、PDF、DOCX 和图片上传；草稿审核后发布 |
 | RAG | 文档解析、本地 Tesseract OCR、切块、关键词候选、1024 维向量、统一 Milvus 检索与发布状态校验 |
 | 图片 | 员工上传到私有 MinIO；审核图片描述后，玩家聊天可显示被引用的图片 |
+| Steam API | 查询本游戏公开公告；玩家通过游戏客户端票据关联 Steam 后，核实本人游戏归属与成就 |
 
 员工工作台只有一个文档知识库入口。文件上传和手工正文都进入 Celery 队列；页面持续显示解析、切块、向量化与索引进度。
 
@@ -28,6 +29,7 @@ flowchart LR
     员工[员工 /support/admin] --> API
     API --> Agent[LangGraph 客服 Agent]
     Agent --> Milvus[(Milvus 知识原文、审核状态、切块与向量)]
+    Agent --> Steam[Steam Web API]
     API --> PG[(PostgreSQL 账号、会话、工单与进度)]
     API --> MinIO[(MinIO 图片与临时文件)]
     API --> Redis[(Valkey / Redis 协议队列)]
@@ -44,6 +46,7 @@ flowchart LR
 | Celery + Valkey | 异步解析、OCR、向量化和重建索引 |
 | PostgreSQL | 账号、会话、消息、工单、反馈和上传进度 |
 | MinIO | 私有知识图片与临时待处理文件 |
+| Steam Web API | 公告、已验证玩家的游戏归属与成就 |
 
 AI 只使用已发布资料回答游戏事实。文档或条目修改后会回到草稿；员工复核来源、正文、切块和图片描述后再发布。高风险操作或资料不足时转人工，工单保留对话上下文。
 
@@ -72,6 +75,19 @@ PowerShell 默认没有 GNU Make，直接运行上面的 `docker compose` 命令
 ```powershell
 docker compose --env-file .env.development up -d --force-recreate app
 ```
+
+## Steam API 接入
+
+公开公告无需密钥。个人游戏归属、成就和 Steam 身份验证需要在服务器的 `.env.development` 设置 `STEAM_PUBLISHER_KEY`（有本游戏权限的 Steamworks Publisher Web API Key）；不要放入前端或提交到仓库。`STEAM_APP_ID` 默认为 `3326810`，`STEAM_TICKET_IDENTITY` 默认为 `dots-support`。设置后运行迁移并重启 API：
+
+```powershell
+docker compose --env-file .env.development exec app /app/.venv/bin/alembic upgrade head
+docker compose --env-file .env.development up -d --force-recreate app
+```
+
+玩家先登录本系统。游戏客户端调用 Steamworks `GetAuthTicketForWebApi("dots-support")`，将票据字节转换为十六进制后，以玩家 JWT 调用 `POST /api/v1/steam/link`，请求体为 `{"ticket":"..."}`。服务端向 Steam 验证票据，只保存返回的 SteamID；票据不落库。`DELETE /api/v1/steam/link` 可解除关联。网站页面本身不能生成游戏客户端的 Steamworks 票据，因此个人数据功能需游戏客户端接入后才能使用。
+
+玩家可在聊天里问“Steam 最新公告”“我拥有这款游戏吗”“我的 Steam 成就”，或用 JWT 调用 `POST /api/v1/support/tools/get_steam_news`、`check_my_steam_ownership`、`get_my_steam_achievements`（请求体 `{"arguments":{}}`）。个人查询只使用服务端保存的关联 SteamID；不能通过请求参数指定其他玩家。Steam API 故障会返回暂时不可用，不会推断归属或成就。公告来源为 [Steam News API](https://partner.steamgames.com/doc/webapi/ISteamNews)，身份验证、归属和成就分别使用 Steamworks 的 [ISteamUserAuth](https://partner.steamgames.com/doc/webapi/ISteamUserAuth)、[ISteamUser](https://partner.steamgames.com/doc/webapi/ISteamUser) 与 [ISteamUserStats](https://partner.steamgames.com/doc/webapi/ISteamUserStats)。
 
 ## 知识库使用流程
 

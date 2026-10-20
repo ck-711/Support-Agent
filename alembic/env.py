@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.models.session import Session  # noqa: F401
 from app.models.support import (  # noqa: F401
     SupportChunk, SupportConversation, SupportDocument, SupportDocumentUpload, SupportFeedback, SupportKnowledge,
-    SupportMessage, SupportTicket,
+    SupportMessage, SupportSteamAccount, SupportTicket,
 )
 from app.models.thread import Thread  # noqa: F401
 from app.models.user import User  # noqa: F401

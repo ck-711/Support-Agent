@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Annotated, Any, AsyncIterator
 from uuid import UUID, uuid4
 
+import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from pydantic import HttpUrl, TypeAdapter
 from starlette.responses import Response, StreamingResponse
@@ -102,6 +103,7 @@ from app.services.support_store import (
     update_ticket,
 )
 from app.services.support_tools import execute_support_tool
+from app.services.steam_api import SteamUnavailable
 
 router = APIRouter()
 
@@ -489,6 +491,8 @@ async def call_support_tool(
         result = await execute_support_tool(tool_name, data.arguments, player.id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (SteamUnavailable, httpx.TransportError) as exc:
+        raise HTTPException(status_code=503, detail="Steam is temporarily unavailable") from exc
     logger.info("support_tool_executed", tool_name=tool_name, conversation_id=player.id)
     return ToolCallResult(name=tool_name, result=result)
 
