@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from app.services.support_documents import search_documents, search_support_vectors
-from app.services.support_store import create_handoff_ticket, list_knowledge, list_tickets
+from app.services.support_documents_v2 import search_documents, search_support_vectors
+from app.services.support_store import create_handoff_ticket, list_tickets
 
 TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
@@ -42,13 +42,9 @@ async def execute_support_tool(
         passages = await search_support_vectors(query, limit=5)
         if not passages:
             passages = await search_documents(query, limit=5)
-        articles = await list_knowledge(published_only=True) if not passages else []
         return {
             "passages": [{"title": p.title, "content": p.content, "url": p.url} for p in passages],
-            "articles": [
-                {"title": article.title, "content": article.content, "url": article.source_url}
-                for article in articles[:5] if query.casefold() in (article.title + " " + article.content).casefold()
-            ],
+            "articles": [],
         }
     if name == "list_my_tickets":
         tickets = await list_tickets(conversation_id)

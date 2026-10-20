@@ -3,8 +3,8 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Annotated, AsyncIterator
-from uuid import UUID
+from typing import Annotated, Any, AsyncIterator
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from pydantic import HttpUrl, TypeAdapter
@@ -18,7 +18,6 @@ from app.models.support import (
     SupportConversation,
     SupportDocument,
     SupportDocumentImage,
-    SupportKnowledge,
     SupportMessage,
     SupportTicket,
     now_utc,
@@ -39,8 +38,6 @@ from app.schemas.support import (
     DocumentSource,
     FeedbackRead,
     FeedbackWrite,
-    KnowledgeRead,
-    KnowledgeWrite,
     MessageCreate,
     MessageRead,
     SourceReference,
@@ -52,26 +49,24 @@ from app.schemas.support import (
     TicketUpdate,
     ToolCallRequest,
     ToolCallResult,
+    TextDocumentWrite,
     VisionDescription,
 )
 from app.services.game_support_agent import answer_player, classify_handoff
-from app.services.support_documents import (
+from app.services.support_documents_v2 import (
     MAX_UPLOAD_BYTES,
-    article_vectors,
     delete_document,
     document_page_text,
     extract_keyword_candidates,
     get_document,
-    index_document,
     list_document_chunks,
     list_documents,
     normalize_keywords,
     publish_document,
-    reindex_document,
     save_chunk_keywords,
     stored_keywords,
 )
-from app.services.support_images import (
+from app.services.support_images_v2 import (
     MAX_IMAGE_BYTES,
     create_image,
     delete_document_images,
@@ -83,6 +78,8 @@ from app.services.support_images import (
     update_image,
 )
 from app.services.support_upload_progress import create_upload, get_upload, update_upload
+from app.services.support_upload_storage import put_upload, remove_upload
+from app.services.support_tasks import enqueue_document, enqueue_reindex
 from app.services.support_store import (
     add_message,
     claim_ticket,
@@ -94,22 +91,17 @@ from app.services.support_store import (
     find_conversation,
     get_active_handoff,
     get_ticket,
-    get_knowledge,
-    list_knowledge,
     list_feedback,
     latest_support_activity,
     list_messages,
     list_tickets,
     overview,
-    publish_knowledge,
-    save_knowledge,
     save_feedback,
     quality_overview,
     release_ticket,
     update_ticket,
 )
 from app.services.support_tools import execute_support_tool
-from app.services.support_milvus import replace_source
 
 router = APIRouter()
 
@@ -147,15 +139,37 @@ def ticket_read(ticket: SupportTicket) -> TicketRead:
     return TicketRead.model_validate(ticket, from_attributes=True)
 
 
-def knowledge_read(entry: SupportKnowledge) -> KnowledgeRead:
-    """Map a knowledge entry to a response."""
-    return KnowledgeRead.model_validate(entry, from_attributes=True)
-
-
 def document_read(document: SupportDocument) -> DocumentRead:
     """Map indexed document metadata to staff output."""
     parsed = DocumentRead.model_validate(document, from_attributes=True)
     return parsed.model_copy(update={"keywords": stored_keywords(document.keywords_json)})
+
+
+async def queue_document_upload(
+    *,
+    upload_id: str,
+    staff_user_id: int,
+    raw: bytes,
+    mime_type: str,
+    options: dict[str, Any],
+) -> DocumentUploadProgress:
+    """Stage a bounded file outside Redis and queue its Milvus indexing task."""
+    if not raw or len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Document exceeds the 50 MiB upload limit")
+    object_key = f"uploads/{upload_id}"
+    await create_upload(upload_id, staff_user_id)
+    try:
+        await put_upload(object_key, raw, mime_type)
+        await enqueue_document(upload_id, staff_user_id, object_key, options)
+    except Exception as exc:
+        await update_upload(upload_id, staff_user_id, "failed", 30)
+        try:
+            await remove_upload(object_key)
+        except Exception:
+            logger.exception("support_document_staged_file_cleanup_failed", upload_id=upload_id)
+        logger.exception("support_document_queue_failed", upload_id=upload_id, staff_user_id=staff_user_id)
+        raise HTTPException(status_code=503, detail="Document indexing queue unavailable") from exc
+    return DocumentUploadProgress(id=upload_id, status="processing", phase="queued", percent=30)
 
 
 HANDOFF_ACK = {
@@ -329,13 +343,6 @@ async def player_tickets(request: Request, player: SupportConversation = Depends
     return [ticket_read(ticket) for ticket in await list_tickets(player.id)]
 
 
-@router.get("/knowledge", response_model=list[KnowledgeRead])
-@limiter.limit("40/minute")
-async def public_knowledge(request: Request) -> list[KnowledgeRead]:
-    """Show only published, sourced support articles."""
-    return [knowledge_read(entry) for entry in await list_knowledge(published_only=True)]
-
-
 @router.delete("/conversations/current", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit("10/hour")
 async def erase_conversation(request: Request, player: SupportConversation = Depends(current_player)) -> None:
@@ -348,11 +355,12 @@ async def erase_conversation(request: Request, player: SupportConversation = Dep
 @limiter.limit("60/minute")
 async def admin_overview(request: Request, admin: User = Depends(current_admin)) -> SupportOverview:
     """Display staff workload and knowledge counts."""
-    open_count, tickets, articles, conversations = await overview()
+    open_count, tickets, conversations = await overview()
+    published = sum(item.status == "published" for item in await list_documents())
     return SupportOverview(
         open_tickets=open_count,
         total_tickets=tickets,
-        published_articles=articles,
+        published_documents=published,
         conversations_30d=conversations,
     )
 
@@ -442,11 +450,14 @@ async def admin_events(request: Request, admin: User = Depends(current_admin)) -
 @limiter.limit("60/minute")
 async def admin_quality(request: Request, admin: User = Depends(current_admin)) -> SupportQualityOverview:
     """Show feedback, overdue source, and queue metrics."""
-    positive, negative, stale_articles, stale_documents, unassigned = await quality_overview()
+    positive, negative, unassigned = await quality_overview()
+    stale_documents = sum(
+        item.status == "published" and item.review_due_at is not None and item.review_due_at <= now_utc()
+        for item in await list_documents()
+    )
     return SupportQualityOverview(
         positive_feedback=positive,
         negative_feedback=negative,
-        stale_articles=stale_articles,
         stale_documents=stale_documents,
         unassigned_tickets=unassigned,
     )
@@ -511,15 +522,23 @@ async def public_image(request: Request, image_id: str) -> Response:
     except Exception as exc:
         logger.exception("support_public_image_read_failed", image_id=image_id)
         raise HTTPException(status_code=503, detail="Image storage unavailable") from exc
-    return Response(raw, media_type=image.mime_type, headers={"Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff"})
+    return Response(
+        raw,
+        media_type=image.mime_type,
+        headers={"Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 def document_image_read(image: SupportDocumentImage) -> DocumentImageRead:
     """Return image metadata without exposing its private object key."""
     return DocumentImageRead(
-        id=image.id, document_id=image.document_id, filename=image.filename,
-        description=image.description, page_number=image.page_number,
-        created_at=image.created_at, url=f"/api/v1/support/images/{image.id}",
+        id=image.id,
+        document_id=image.document_id,
+        filename=image.filename,
+        description=image.description,
+        page_number=image.page_number,
+        created_at=image.created_at,
+        url=f"/api/v1/support/images/{image.id}",
     )
 
 
@@ -565,7 +584,9 @@ async def admin_document_source(
     )
 
 
-@router.post("/admin/documents/{document_id}/images", response_model=DocumentImageRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/admin/documents/{document_id}/images", response_model=DocumentImageRead, status_code=status.HTTP_201_CREATED
+)
 @limiter.limit("20/hour")
 async def admin_upload_image(
     request: Request,
@@ -601,12 +622,16 @@ async def admin_image_content(request: Request, image_id: str, admin: User = Dep
     except Exception as exc:
         logger.exception("support_admin_image_read_failed", image_id=image_id)
         raise HTTPException(status_code=503, detail="Image storage unavailable") from exc
-    return Response(raw, media_type=image.mime_type, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+    return Response(
+        raw, media_type=image.mime_type, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+    )
 
 
 @router.post("/admin/images/{image_id}/describe", response_model=VisionDescription)
 @limiter.limit("20/hour")
-async def admin_describe_image(request: Request, image_id: str, admin: User = Depends(current_admin)) -> VisionDescription:
+async def admin_describe_image(
+    request: Request, image_id: str, admin: User = Depends(current_admin)
+) -> VisionDescription:
     """Suggest a visual description that staff must review and save."""
     image = await get_image(image_id)
     if image is None:
@@ -683,7 +708,7 @@ async def admin_update_chunk_keywords(
     )
 
 
-@router.post("/admin/documents", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
+@router.post("/admin/documents", response_model=DocumentUploadProgress, status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("10/hour")
 async def admin_upload_document(
     request: Request,
@@ -696,8 +721,8 @@ async def admin_upload_document(
     keywords: Annotated[str, Form(max_length=1000)] = "",
     upload_id: Annotated[UUID | None, Form()] = None,
     admin: User = Depends(current_admin),
-) -> DocumentRead:
-    """Parse and index a staff upload as an unpublished draft."""
+) -> DocumentUploadProgress:
+    """Queue a staff upload for parsing and Milvus indexing."""
     url = None
     if source_url:
         try:
@@ -711,42 +736,54 @@ async def admin_upload_document(
         raise HTTPException(status_code=422, detail="Invalid language")
     raw = await file.read(MAX_UPLOAD_BYTES + 1)
     await file.close()
-    progress_id = str(upload_id) if upload_id is not None else None
-    try:
-        if progress_id is not None:
-            await create_upload(progress_id, admin.id)
-
-        async def report_progress(phase: str, percent: int) -> None:
-            if progress_id is not None:
-                await update_upload(progress_id, admin.id, phase, percent)
-
-        document = await index_document(
-            title,
-            filename,
-            file.content_type or "application/octet-stream",
-            raw,
-            url,
-            source_type=source_type,
-            game_version=game_version or None,
-            language=language,
-            keywords=keywords.replace("，", ",").replace("\n", ",").split(","),
-            progress=report_progress if progress_id is not None else None,
-        )
-        if progress_id is not None:
-            await update_upload(progress_id, admin.id, "completed", 100, document_id=document.id)
-    except ValueError as exc:
-        if progress_id is not None:
-            await update_upload(progress_id, admin.id, "failed", 0)
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception as exc:
-        if progress_id is not None:
-            await update_upload(progress_id, admin.id, "failed", 0)
-        logger.exception("support_document_upload_failed", staff_user_id=admin.id)
-        raise HTTPException(status_code=503, detail="Document indexing unavailable") from exc
-    return document_read(document)
+    return await queue_document_upload(
+        upload_id=str(upload_id or uuid4()),
+        staff_user_id=admin.id,
+        raw=raw,
+        mime_type=file.content_type or "application/octet-stream",
+        options={
+            "title": title,
+            "filename": filename,
+            "mime_type": file.content_type or "application/octet-stream",
+            "source_url": url,
+            "source_type": source_type,
+            "game_version": game_version or None,
+            "language": language,
+            "keywords": keywords.replace("，", ",").replace("\n", ",").split(","),
+        },
+    )
 
 
-@router.put("/admin/documents/{document_id}", response_model=DocumentRead)
+@router.post("/admin/documents/text", response_model=DocumentUploadProgress, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/hour")
+async def admin_create_text_document(
+    request: Request,
+    data: TextDocumentWrite,
+    admin: User = Depends(current_admin),
+) -> DocumentUploadProgress:
+    """Queue staff-authored text through the same indexing and review pipeline."""
+    raw = data.content.encode("utf-8")
+    return await queue_document_upload(
+        upload_id=str(uuid4()),
+        staff_user_id=admin.id,
+        raw=raw,
+        mime_type="text/plain; charset=utf-8",
+        options={
+            "title": data.title,
+            "filename": f"{uuid4().hex}.txt",
+            "mime_type": "text/plain",
+            "source_url": str(data.source_url) if data.source_url else None,
+            "source_type": data.source_type,
+            "game_version": data.game_version,
+            "language": data.language,
+            "keywords": data.keywords,
+        },
+    )
+
+
+@router.put(
+    "/admin/documents/{document_id}", response_model=DocumentUploadProgress, status_code=status.HTTP_202_ACCEPTED
+)
 @limiter.limit("10/hour")
 async def admin_replace_document(
     request: Request,
@@ -760,8 +797,8 @@ async def admin_replace_document(
     keywords: Annotated[str, Form(max_length=1000)] = "",
     upload_id: Annotated[UUID | None, Form()] = None,
     admin: User = Depends(current_admin),
-) -> DocumentRead:
-    """Replace a document and its vectors, returning it to draft review."""
+) -> DocumentUploadProgress:
+    """Queue replacement and return its progress identifier."""
     if await get_document(document_id) is None:
         raise HTTPException(status_code=404, detail="Document not found")
     url = None
@@ -777,41 +814,23 @@ async def admin_replace_document(
         raise HTTPException(status_code=422, detail="Invalid language")
     raw = await file.read(MAX_UPLOAD_BYTES + 1)
     await file.close()
-    progress_id = str(upload_id) if upload_id is not None else None
-    try:
-        if progress_id is not None:
-            await create_upload(progress_id, admin.id)
-
-        async def report_progress(phase: str, percent: int) -> None:
-            if progress_id is not None:
-                await update_upload(progress_id, admin.id, phase, percent)
-
-        document = await index_document(
-            title,
-            filename,
-            file.content_type or "application/octet-stream",
-            raw,
-            url,
-            document_id,
-            source_type=source_type,
-            game_version=game_version or None,
-            language=language,
-            keywords=keywords.replace("，", ",").replace("\n", ",").split(","),
-            progress=report_progress if progress_id is not None else None,
-        )
-        if progress_id is not None:
-            await update_upload(progress_id, admin.id, "completed", 100, document_id=document.id)
-    except ValueError as exc:
-        if progress_id is not None:
-            await update_upload(progress_id, admin.id, "failed", 0)
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception as exc:
-        if progress_id is not None:
-            await update_upload(progress_id, admin.id, "failed", 0)
-        logger.exception("support_document_replace_failed", document_id=document_id)
-        raise HTTPException(status_code=503, detail="Document indexing unavailable") from exc
-    logger.info("support_document_replaced", document_id=document_id, staff_user_id=admin.id)
-    return document_read(document)
+    return await queue_document_upload(
+        upload_id=str(upload_id or uuid4()),
+        staff_user_id=admin.id,
+        raw=raw,
+        mime_type=file.content_type or "application/octet-stream",
+        options={
+            "title": title,
+            "filename": filename,
+            "mime_type": file.content_type or "application/octet-stream",
+            "source_url": url,
+            "document_id": document_id,
+            "source_type": source_type,
+            "game_version": game_version or None,
+            "language": language,
+            "keywords": keywords.replace("，", ",").replace("\n", ",").split(","),
+        },
+    )
 
 
 @router.get("/admin/document-uploads/{upload_id}", response_model=DocumentUploadProgress)
@@ -832,20 +851,27 @@ async def admin_document_upload_progress(
     )
 
 
-@router.post("/admin/documents/{document_id}/reindex", response_model=DocumentRead)
+@router.post(
+    "/admin/documents/{document_id}/reindex",
+    response_model=DocumentUploadProgress,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 @limiter.limit("10/hour")
 async def admin_reindex_document(
     request: Request, document_id: str, admin: User = Depends(current_admin)
-) -> DocumentRead:
-    """Rebuild a document's vectors and return it to draft review."""
-    try:
-        document = await reindex_document(document_id)
-    except Exception as exc:
-        logger.exception("support_document_reindex_failed", document_id=document_id)
-        raise HTTPException(status_code=503, detail="Document indexing unavailable") from exc
-    if document is None:
+) -> DocumentUploadProgress:
+    """Queue a vector rebuild and return a progress identifier."""
+    if await get_document(document_id) is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    return document_read(document)
+    upload_id = str(uuid4())
+    await create_upload(upload_id, admin.id)
+    try:
+        await enqueue_reindex(upload_id, admin.id, document_id)
+    except Exception as exc:
+        await update_upload(upload_id, admin.id, "failed", 0)
+        logger.exception("support_document_reindex_failed", document_id=document_id)
+        raise HTTPException(status_code=503, detail="Document indexing queue unavailable") from exc
+    return DocumentUploadProgress(id=upload_id, status="processing", phase="queued", percent=30)
 
 
 @router.post("/admin/documents/{document_id}/publish", response_model=DocumentRead)
@@ -880,57 +906,3 @@ async def admin_delete_document(request: Request, document_id: str, admin: User 
     if not removed:
         raise HTTPException(status_code=404, detail="Document not found")
     logger.info("support_document_deleted", document_id=document_id, staff_user_id=admin.id)
-
-
-@router.get("/admin/knowledge", response_model=list[KnowledgeRead])
-@limiter.limit("60/minute")
-async def admin_knowledge(request: Request, admin: User = Depends(current_admin)) -> list[KnowledgeRead]:
-    """Display drafts and published entries."""
-    return [knowledge_read(entry) for entry in await list_knowledge()]
-
-
-@router.post("/admin/knowledge", response_model=KnowledgeRead, status_code=status.HTTP_201_CREATED)
-@limiter.limit("30/minute")
-async def admin_create_knowledge(
-    request: Request, data: KnowledgeWrite, admin: User = Depends(current_admin)
-) -> KnowledgeRead:
-    """Create an unpublished knowledge draft."""
-    entry = await save_knowledge(data)
-    if entry is None:
-        raise HTTPException(status_code=500, detail="Knowledge draft could not be created")
-    logger.info("support_knowledge_created", entry_id=entry.id, staff_user_id=admin.id)
-    return knowledge_read(entry)
-
-
-@router.put("/admin/knowledge/{entry_id}", response_model=KnowledgeRead)
-@limiter.limit("30/minute")
-async def admin_edit_knowledge(
-    request: Request, entry_id: str, data: KnowledgeWrite, admin: User = Depends(current_admin)
-) -> KnowledgeRead:
-    """Revise an entry and send it back to draft review."""
-    entry = await save_knowledge(data, entry_id=entry_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="Knowledge entry not found")
-    logger.info("support_knowledge_revised", entry_id=entry_id, staff_user_id=admin.id)
-    return knowledge_read(entry)
-
-
-@router.post("/admin/knowledge/{entry_id}/publish", response_model=KnowledgeRead)
-@limiter.limit("30/minute")
-async def admin_publish_knowledge(
-    request: Request, entry_id: str, admin: User = Depends(current_admin)
-) -> KnowledgeRead:
-    """Approve and publish a sourced entry."""
-    existing = await get_knowledge(entry_id)
-    if existing is None:
-        raise HTTPException(status_code=404, detail="Knowledge entry not found")
-    try:
-        await replace_source(existing.id, await article_vectors(existing))
-    except Exception as exc:
-        logger.exception("support_knowledge_index_failed", entry_id=entry_id)
-        raise HTTPException(status_code=503, detail="Knowledge indexing unavailable") from exc
-    entry = await publish_knowledge(entry_id, admin.id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="Knowledge entry not found")
-    logger.info("support_knowledge_published", entry_id=entry_id, staff_user_id=admin.id)
-    return knowledge_read(entry)

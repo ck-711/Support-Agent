@@ -36,7 +36,7 @@ from app.core.middleware import (
 from app.core.observability import langfuse_init
 from app.services.database import database_service
 from app.services.memory import memory_service
-from app.services.support_milvus import close as close_support_milvus, ensure_collection as ensure_support_milvus
+from app.services.support_catalog import close as close_support_catalog, ensure_catalog
 from app.services.support_store import engine as support_engine, purge_expired
 
 SUPPORT_ASSETS = Path(__file__).resolve().parent / "static" / "support"
@@ -90,10 +90,10 @@ async def lifespan(app: FastAPI):
         logger.exception("memory_service_pre_warm_failed", error=str(e))
 
     try:
-        await ensure_support_milvus()
-        logger.info("support_milvus_ready")
+        await ensure_catalog()
+        logger.info("support_catalog_ready")
     except Exception:
-        logger.exception("support_milvus_initialization_failed")
+        logger.exception("support_catalog_initialization_failed")
 
     retention_task = asyncio.create_task(support_retention_loop())
 
@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await support_engine.dispose()
-    await close_support_milvus()
+    await close_support_catalog()
     if agent._connection_pool:
         await agent._connection_pool.close()
         logger.info("connection_pool_closed")

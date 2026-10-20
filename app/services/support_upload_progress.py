@@ -10,14 +10,14 @@ from app.services.support_store import session_factory
 
 
 async def create_upload(upload_id: str, staff_user_id: int) -> None:
-    """Start tracking after the request body has reached the API."""
+    """Track a queued document job after the request body reaches the API."""
     async with session_factory() as db:
         await db.exec(
             delete(SupportDocumentUpload).where(
                 col(SupportDocumentUpload.updated_at) < now_utc() - timedelta(days=1)
             )
         )
-        db.add(SupportDocumentUpload(id=upload_id, staff_user_id=staff_user_id))
+        db.add(SupportDocumentUpload(id=upload_id, staff_user_id=staff_user_id, phase="queued", percent=30))
         await db.commit()
 
 

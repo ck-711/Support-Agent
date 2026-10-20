@@ -34,34 +34,34 @@ docker compose --env-file .env.development up -d --no-deps app
 
 先通过 `/docs` 中的 `POST /api/v1/auth/register` 注册现有系统用户。密码须为 8–64 个字符，且至少包含一个大写字母、一个小写字母、一个数字及一个支持的特殊字符（例如 `!`、`@` 或 `#`）。记下返回的数字用户 ID，将该 ID 写入 `SUPPORT_ADMIN_USER_IDS`；多个管理员用逗号分隔。重启服务后，即可在 `/support/admin` 使用该账号登录。默认值为空，所有管理员接口均拒绝访问。管理员权限依赖 ID 白名单，不依赖可由公开注册抢占的邮箱地址。
 
-管理员可查看工单及完整对话、修改状态、在原会话向玩家回复，以及创建、修改、发布有来源的知识条目。修改已发布条目会退回草稿，需再次审核发布。当前没有邮件通知。玩家在 `/support` 注册或登录后可跨设备查看自己的会话和回复；浏览器里已有的旧匿名会话可在首次登录时认领一次，旧令牌随即失效。
+管理员可查看工单及完整对话、修改状态、在原会话向玩家回复，并在统一的文档知识库中上传资料或手工建立正文。修改已发布资料会退回草稿，需再次审核发布。当前没有邮件通知。玩家在 `/support` 注册或登录后可跨设备查看自己的会话和回复；浏览器里已有的旧匿名会话可在首次登录时认领一次，旧令牌随即失效。
 
 ## 文档知识库与向量模型
 
-员工工作台可上传不超过 50 MiB 的 UTF-8 TXT、Markdown、PDF、DOCX、PNG、JPG 或 WEBP。PDF 最多 200 页，解析后的正文最多 60 万字符，最多建立 800 个切块。系统读取正文，并用本地 Tesseract OCR 识别 PDF 页面和 DOCX 内嵌图片中的文字；直接上传的图片也会识别。识别文字会进入原文、切块和关键词候选。系统按 1200 字符与 180 字符重叠切分、批量生成 1024 维向量。发布时，手工知识条目、文档切块和审核过的图片描述都写入同一个 Milvus collection。PostgreSQL 保存原文、审核状态和旧向量，检索结果仍须经过实时发布状态与版本校验。PDF 切块保留页码。上传时可记录资料来源类型、语言、适用游戏版本和术语别名；员工可在“审核切块”中查看正文、修改关键词并保存。新文档和替换文件先成为草稿；员工核对来源、版本、OCR 正文和切块后发布，AI 才会检索到它。可重新索引或删除；重新索引也会退回草稿。
+员工工作台可手工建立正文，或上传不超过 50 MiB 的 UTF-8 TXT、Markdown、PDF、DOCX、PNG、JPG 或 WEBP。PDF 最多 200 页，解析后的正文最多 60 万字符，最多建立 800 个切块。文件暂存在私有 MinIO，Celery worker 读取正文，并用本地 Tesseract OCR 识别 PDF 页面、DOCX 内嵌图片和直接上传的图片。系统按 1200 字符与 180 字符重叠切分、批量生成 1024 维向量。原文、文档元数据、关键词、审核状态、切块和图片描述向量均保存在 Milvus 的 `support_catalog_v1` collection；PostgreSQL 只保存账号、客服会话、工单和上传进度。检索命中仍须经过实时发布状态与版本校验。PDF 切块保留页码。员工可在“审核切块”中查看正文、修改关键词并保存。新建、替换和重新索引后均先成为草稿，复核后发布。
 
 Docker 镜像内安装 Tesseract 与简体中文、英语、西班牙语语言包。Windows 本机运行服务时，需另行安装 Tesseract 和对应语言包，确保 `tesseract` 在 `PATH` 中，或在 `.env.development` 设置 `SUPPORT_OCR_COMMAND` 为可执行文件绝对路径；`SUPPORT_OCR_LANGUAGES` 默认为 `chi_sim+eng+spa`。OCR 只在上传或替换文件时运行，重建向量索引使用已保存的识别结果。已有文档需要重新上传原文件，才能提取此前遗漏的图片文字。每份文档最多处理 400 张图片，单张图片最多 2000 万像素，单次 OCR 最长 20 秒，整份文档的图片识别最长约五分钟。大文件需要更长的上传、识别和向量化时间。
 
-默认优先使用已有 `DASHSCOPE_API_KEY` 与 `text-embedding-v3`；没有该 Key 时使用 `OPENAI_API_KEY` 与 `text-embedding-3-small`。也可通过 `SUPPORT_EMBEDDING_MODEL`、`SUPPORT_EMBEDDING_API_KEY` 和 `SUPPORT_EMBEDDING_BASE_URL` 接入输出 **1024 维** 的 OpenAI 兼容 BGE 服务。`SUPPORT_EMBEDDING_DIMENSIONS` 应保持 1024；更换维度时需要新 collection。更换模型后运行下述回填命令，以当前模型重新建立已发布资料的 Milvus 索引。未配置可用的 embedding Key 时，上传和新知识条目的发布会失败；旧资料仍有关键词检索兜底。
+默认优先使用已有 `DASHSCOPE_API_KEY` 与 `text-embedding-v3`；没有该 Key 时使用 `OPENAI_API_KEY` 与 `text-embedding-3-small`。也可通过 `SUPPORT_EMBEDDING_MODEL`、`SUPPORT_EMBEDDING_API_KEY` 和 `SUPPORT_EMBEDDING_BASE_URL` 接入输出 **1024 维** 的 OpenAI 兼容 BGE 服务。`SUPPORT_EMBEDDING_DIMENSIONS` 应保持 1024；更换维度时需要新 collection。更换模型后，在员工工作台逐份重新索引并审核发布。未配置可用的 embedding Key 时，新资料无法完成向量化；已有 Milvus 资料仍可做关键词检索。
 
 ### Milvus 启动与旧资料回填
 
 在 `.env.development` 配置 `SUPPORT_MINIO_ACCESS_KEY`、`SUPPORT_MINIO_SECRET_KEY` 和可用的 embedding Key。Docker Compose 会启动 Milvus、etcd，并复用现有 MinIO 的独立 `support-milvus` 桶；向量端口只绑定本机 `19530`，WebUI 位于 `http://127.0.0.1:19091/webui/`。PowerShell 运行：
 
 ```powershell
-docker compose --env-file .env.development up -d --build app
-docker compose --env-file .env.development exec app /app/.venv/bin/python -m scripts.rebuild_support_milvus
+docker compose --env-file .env.development up -d --build app support-worker
+docker compose --env-file .env.development exec app /app/.venv/bin/python -m scripts.migrate_support_knowledge
 ```
 
 若构建时 Debian 官方源返回 502，可先在当前 PowerShell 会话执行 `$env:DEBIAN_MIRROR="mirrors.tuna.tsinghua.edu.cn"`，再重跑第一条命令。
 
-首次部署或切换 embedding 模型时执行第二条命令。它将所有已发布知识条目、文档切块和图片描述写入同一个 Milvus collection，不改变审核状态；重复运行是安全的。直接在 Windows 上运行 API 时，先用 Compose 启动 `db minio milvus`，将 `SUPPORT_MILVUS_URI` 设置为 `http://127.0.0.1:19530`，再运行 `uv run python -m scripts.rebuild_support_milvus`。新发布的资料会自动写入 Milvus。MinIO 用不同桶存储图片和 Milvus 数据。
+第二条命令用于旧版 PostgreSQL 知识资料迁移；先写入并核对 Milvus，重复运行会跳过已迁入的资料。确认员工页数据正常后，可追加 `--purge-legacy` 清空旧知识表。新资料由 Celery 处理，页面显示上传、排队、解析、切分、向量化和完成状态。MinIO 用不同桶存储知识图片和 Milvus 数据。
 
 MinerU 目前是可选的解析增强，适合现有 OCR 在多栏、复杂表格、公式或扫描版 PDF 上无法保留结构的资料；普通游戏公告、FAQ 和图文说明先使用现有解析流程。
 
 ### 知识库图片
 
-员工打开文档的“审核切块”，可附加 PNG、JPG 或 WEBP 图片（每张最多 10 MiB，每份文档最多 20 张），填写对应页码和描述。图片经解码、缩放、去元数据后保存到私有 MinIO 桶；数据库只存对象键、审核描述和 1024 维描述向量。点击“视觉模型生成描述草稿”会把图片发送到配置的视觉模型，结果只填入编辑框；员工须核对游戏 UI、版本及文字后手动保存。已有 `DASHSCOPE_API_KEY` 时默认使用 `qwen3-vl-plus`，也可设置 `SUPPORT_VISION_MODEL`、`SUPPORT_VISION_API_KEY`、`SUPPORT_VISION_BASE_URL`，留空模型名则关闭建议功能。OCR 仍负责提取图片中的文字。
+员工打开文档的“审核切块”，可附加 PNG、JPG 或 WEBP 图片（每张最多 10 MiB，每份文档最多 20 张），填写对应页码和描述。图片经解码、缩放、去元数据后保存到私有 MinIO 桶；Milvus 保存对象键、审核描述和 1024 维描述向量。点击“视觉模型生成描述草稿”会把图片发送到配置的视觉模型，结果只填入编辑框；员工须核对游戏 UI、版本及文字后手动保存。已有 `DASHSCOPE_API_KEY` 时默认使用 `qwen3-vl-plus`，也可设置 `SUPPORT_VISION_MODEL`、`SUPPORT_VISION_API_KEY`、`SUPPORT_VISION_BASE_URL`，留空模型名则关闭建议功能。OCR 仍负责提取图片中的文字。
 
 上传、修改或删除图片会使文档退回草稿；每张图片都要有审核描述才能发布。已发布描述参与文字和向量检索；AI 引用图片时，玩家聊天显示缩略图、描述及原文链接。员工预览走鉴权接口，玩家图片接口只提供已发布文档的图片。删除文档会清除对应对象。当前只支持员工附加图片，不接收玩家上传图片，也不自动保存 PDF/DOCX 中的每张嵌入图。
 
@@ -93,6 +93,6 @@ Agent 可调用 `search_knowledge`、`list_my_tickets`、`request_human_handoff`
 
 - **人工接管**：员工可领取或释放待处理工单。工单处于“待处理/调查中”时，玩家的新消息继续保存到原对话，AI 暂停回答；员工在同一对话回复。工单标记“已解决/已关闭”后，下一条玩家消息重新交给 AI。玩家页和员工页通过带身份请求头的 SSE 流每两秒感知消息及工单变化；断线后保留手动刷新。
 - **反馈与质量**：玩家可对每条 AI 回答评价“有帮助/没帮助”；反馈只允许写入自己的 AI 消息，并保存在数据库。员工页显示反馈数、待领取工单数及到期知识数。运行 `uv run python -m evals.support_eval --output support-eval.json --baseline evals/baselines/v1.3.1.json` 会对 18 条合成的中英西问题测试引用标题、人工转接和延迟，并与已保存基线比较。评测需要数据库与模型服务，不会创建真实工单。该数据集是回归样本，不代表真实玩家流量；生产反馈可用于后续人工标注并扩充样本。
-- **知识检索**：客服和 `search_knowledge` 工具优先检索统一的 Milvus collection；旧版 PostgreSQL 全文/关键词和向量查询保留为回填期间的可用性兜底。PDF 在解析及切分时保留页码，引用链接可打开对应页的提取文本。发布的知识条目和文档设定 90 天复审日期，员工页显示到期提醒；替换或重建文档后需重新发布。旧 PDF 如需页码引用，须重新上传原文件。
+- **知识检索**：客服和 `search_knowledge` 工具检索统一的 Milvus collection，并按当前审核状态及版本过滤。Milvus 不可用时，知识检索不可用。PDF 在解析及切分时保留页码，引用链接可打开对应页的提取文本。已发布资料设定 90 天复审日期，员工页显示到期提醒；替换或重建文档后需重新发布。
 
 升级已有环境时运行 `uv run alembic upgrade head`（Windows 也可运行 `.\.venv\Scripts\python.exe -m alembic upgrade head`）。新迁移为会话增加账号归属，并建立历史分页索引。旧匿名对话仍保留至 30 天清理期限；在原浏览器登录账号时可认领。玩家 API 已不再接受单独的旧匿名令牌。

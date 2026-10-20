@@ -13,7 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.models.support import (
-    SupportConversation, SupportDocument, SupportFeedback, SupportKnowledge, SupportMessage, SupportTicket, now_utc,
+    SupportConversation, SupportFeedback, SupportKnowledge, SupportMessage, SupportTicket, now_utc,
 )
 from app.models.user import User
 from app.schemas.support import FeedbackWrite, KnowledgeWrite, SourceReference, TicketCreate, TicketUpdate
@@ -369,7 +369,7 @@ async def purge_expired() -> int:
         return len(expired)
 
 
-async def overview() -> tuple[int, int, int, int]:
+async def overview() -> tuple[int, int, int]:
     """Return counts for the staff dashboard."""
     since = datetime.now(UTC) - timedelta(days=30)
     async with session_factory() as db:
@@ -377,13 +377,10 @@ async def overview() -> tuple[int, int, int, int]:
             select(func.count()).select_from(SupportTicket).where(SupportTicket.status != "closed")
         )
         ticket_count = await db.scalar(select(func.count()).select_from(SupportTicket))
-        knowledge_count = await db.scalar(
-            select(func.count()).select_from(SupportKnowledge).where(SupportKnowledge.status == "published")
-        )
         conversation_count = await db.scalar(
             select(func.count()).select_from(SupportConversation).where(col(SupportConversation.created_at) >= since)
         )
-        return int(open_count or 0), int(ticket_count or 0), int(knowledge_count or 0), int(conversation_count or 0)
+        return int(open_count or 0), int(ticket_count or 0), int(conversation_count or 0)
 
 
 async def save_feedback(conversation_id: str, message_id: str, feedback: FeedbackWrite) -> SupportFeedback | None:
@@ -418,21 +415,12 @@ async def latest_support_activity() -> tuple[str, str]:
         return (message_at.isoformat() if message_at else "", feedback_at.isoformat() if feedback_at else "")
 
 
-async def quality_overview() -> tuple[int, int, int, int, int]:
-    """Count player ratings, due sources, and unassigned active tickets."""
+async def quality_overview() -> tuple[int, int, int]:
+    """Count player ratings and unassigned active tickets."""
     async with session_factory() as db:
         positive = await db.scalar(select(func.count()).select_from(SupportFeedback).where(SupportFeedback.rating == "positive"))
         negative = await db.scalar(select(func.count()).select_from(SupportFeedback).where(SupportFeedback.rating == "negative"))
-        stale_articles = await db.scalar(select(func.count()).select_from(SupportKnowledge).where(
-            SupportKnowledge.status == "published", col(SupportKnowledge.review_due_at) <= now_utc()
-        ))
-        stale_documents = await db.scalar(select(func.count()).select_from(SupportDocument).where(
-            SupportDocument.status == "published", col(SupportDocument.review_due_at) <= now_utc()
-        ))
         unassigned = await db.scalar(select(func.count()).select_from(SupportTicket).where(
             col(SupportTicket.status).in_(["open", "investigating"]), col(SupportTicket.assigned_to).is_(None)
         ))
-        return (
-            int(positive or 0), int(negative or 0), int(stale_articles or 0),
-            int(stale_documents or 0), int(unassigned or 0),
-        )
+        return int(positive or 0), int(negative or 0), int(unassigned or 0)

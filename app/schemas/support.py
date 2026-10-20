@@ -118,7 +118,7 @@ class SupportOverview(BaseModel):
 
     open_tickets: int
     total_tickets: int
-    published_articles: int
+    published_documents: int
     conversations_30d: int
 
 
@@ -150,6 +150,18 @@ class DocumentUploadProgress(BaseModel):
     phase: str
     percent: int
     document_id: str | None = None
+
+
+class TextDocumentWrite(BaseModel):
+    """Manually authored knowledge entering the same document pipeline."""
+
+    title: str = Field(min_length=3, max_length=200)
+    content: str = Field(min_length=10, max_length=100000)
+    source_url: HttpUrl | None = None
+    source_type: Literal["unknown", "official", "community", "internal"] = "unknown"
+    game_version: str | None = Field(default=None, max_length=64)
+    language: Literal["en", "es", "zh"] = "en"
+    keywords: list[str] = Field(default_factory=list, max_length=50)
 
 
 class DocumentSource(BaseModel):
@@ -259,6 +271,5 @@ class SupportQualityOverview(BaseModel):
 
     positive_feedback: int
     negative_feedback: int
-    stale_articles: int
     stale_documents: int
     unassigned_tickets: int

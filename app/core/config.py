@@ -218,6 +218,8 @@ class Settings:
         self.SUPPORT_MILVUS_URI = os.getenv("SUPPORT_MILVUS_URI", "http://localhost:19530")
         self.SUPPORT_MILVUS_TOKEN = os.getenv("SUPPORT_MILVUS_TOKEN", "")
         self.SUPPORT_MILVUS_COLLECTION = os.getenv("SUPPORT_MILVUS_COLLECTION", "support_knowledge_v1")
+        self.SUPPORT_CATALOG_COLLECTION = os.getenv("SUPPORT_CATALOG_COLLECTION", "support_catalog_v1")
+        self.SUPPORT_CELERY_BROKER_URL = os.getenv("SUPPORT_CELERY_BROKER_URL", "redis://localhost:6379/1")
         self.CHECKPOINT_TABLES = ["checkpoint_blobs", "checkpoint_writes", "checkpoints"]
 
         # Valkey/Redis Cache Configuration (optional — if host is set, caching is enabled)

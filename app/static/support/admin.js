@@ -6,7 +6,6 @@ const $ = (selector) => document.querySelector(selector);
 const languageSelect = $("#admin-language");
 const dateLocales = { en: "en-US", es: "es-ES", zh: "zh-CN" };
 let adminToken = sessionStorage.getItem(TOKEN_KEY);
-let selectedArticle = null;
 let dashboardData = null;
 let eventController = null;
 let selectedTicketId = null;
@@ -17,9 +16,9 @@ const extraStrings = {
   zh: { claim: "领取工单", release: "释放工单", assigned: "处理员工", unassigned: "待领取", overdue: "知识复审已到期", quality: "质量指标", positive: "有帮助", negative: "没帮助", staleArticles: "待复审条目", staleDocuments: "待复审文档", waiting: "待领取工单", uploadImage: "添加知识库图片", imagePage: "对应文档页码（可选）", imageDescription: "审核后的图片描述", generateDescription: "视觉模型生成描述草稿", saveDescription: "保存描述", imageUploaded: "图片已上传。请审核描述后再发布。", imageSaved: "图片描述已保存。发布文档后才会向玩家展示。", imageDeleted: "图片已删除。", removeImage: "删除图片", imageLimit: "图片不能超过 10 MiB。", imageDraft: "模型生成的是草稿；请核对可见内容再保存。" }
 };
 const progressStrings = {
-  en: { uploading: "Uploading file", parsing: "Parsing text and OCR", splitting: "Preparing search passages", embedding: "Creating vector index", saving: "Saving document", completed: "Index ready for review", failed: "Upload failed", overall: "Overall" },
-  es: { uploading: "Subiendo archivo", parsing: "Extrayendo texto y OCR", splitting: "Preparando fragmentos", embedding: "Creando índice vectorial", saving: "Guardando documento", completed: "Índice listo para revisión", failed: "Error al subir", overall: "Total" },
-  zh: { uploading: "正在上传文件", parsing: "正在解析文字和 OCR 识别", splitting: "正在切分检索片段", embedding: "正在生成向量索引", saving: "正在保存文档", completed: "索引已完成，等待审核", failed: "上传失败", overall: "总进度" }
+  en: { uploading: "Uploading file", queued: "Queued for processing", parsing: "Parsing text and OCR", splitting: "Preparing search passages", embedding: "Creating vector index", saving: "Saving document", completed: "Index ready for review", failed: "Processing failed", overall: "Overall" },
+  es: { uploading: "Subiendo archivo", queued: "En cola para procesar", parsing: "Extrayendo texto y OCR", splitting: "Preparando fragmentos", embedding: "Creando índice vectorial", saving: "Guardando documento", completed: "Índice listo para revisión", failed: "Error de procesamiento", overall: "Total" },
+  zh: { uploading: "正在上传文件", queued: "已排队，等待处理", parsing: "正在解析文字和 OCR 识别", splitting: "正在切分检索片段", embedding: "正在生成向量索引", saving: "正在保存文档", completed: "索引已完成，等待审核", failed: "处理失败", overall: "总进度" }
 };
 function currentStaffId() {
   try { return String(JSON.parse(atob(adminToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).sub); }
@@ -32,8 +31,8 @@ const strings = {
     secureAccess: "SECURE ACCESS", signInTitle: "Sign in to support", signInHint: "Use a registered staff account to review player reports and approved answers.",
     email: "Email", password: "Password", signIn: "Sign in", missionOperations: "MISSION OPERATIONS",
     overview: "Player support overview", signOut: "Sign out", inbox: "LIVE INBOX", playerReports: "Player conversations",
-    refresh: "Refresh", approvedAnswers: "APPROVED ANSWERS", knowledge: "Knowledge", newArticle: "New article",
-    knowledgeReview: "KNOWLEDGE REVIEW", close: "Close", title: "Title", verifiedFacts: "Answer / verified facts",
+    refresh: "Refresh", approvedAnswers: "APPROVED ANSWERS", knowledge: "Knowledge", newArticle: "Create text source",
+    knowledgeReview: "DOCUMENT KNOWLEDGE", close: "Close", title: "Title", verifiedFacts: "Source text / verified facts",
     sourceUrl: "Source URL", draftHint: "Saving creates a draft. Publish it after checking the source.", saveDraft: "Save draft",
     reviseArticle: "Revise article", openReports: "Open reports", allReports: "All reports",
     publishedArticles: "Published articles", conversations: "Conversations / 30d", noReports: "No player reports yet.",
@@ -65,8 +64,8 @@ const strings = {
     secureAccess: "ACCESO SEGURO", signInTitle: "Acceder al soporte", signInHint: "Usa una cuenta autorizada para revisar informes y respuestas aprobadas.",
     email: "Correo", password: "Contraseña", signIn: "Entrar", missionOperations: "OPERACIONES",
     overview: "Resumen de soporte", signOut: "Cerrar sesión", inbox: "MENSAJES EN VIVO", playerReports: "Conversaciones",
-    refresh: "Actualizar", approvedAnswers: "RESPUESTAS APROBADAS", knowledge: "Conocimiento", newArticle: "Nuevo artículo",
-    knowledgeReview: "REVISIÓN", close: "Cerrar", title: "Título", verifiedFacts: "Respuesta / datos verificados",
+    refresh: "Actualizar", approvedAnswers: "RESPUESTAS APROBADAS", knowledge: "Conocimiento", newArticle: "Crear texto",
+    knowledgeReview: "DOCUMENTOS", close: "Cerrar", title: "Título", verifiedFacts: "Texto / datos verificados",
     sourceUrl: "URL de la fuente", draftHint: "Se guardará como borrador. Revisa la fuente antes de publicarlo.", saveDraft: "Guardar borrador",
     reviseArticle: "Editar artículo", openReports: "Informes abiertos", allReports: "Todos los informes",
     publishedArticles: "Artículos publicados", conversations: "Conversaciones / 30 días", noReports: "Aún no hay informes.",
@@ -98,8 +97,8 @@ const strings = {
     secureAccess: "员工登录", signInTitle: "登录客服工作台", signInHint: "使用已授权的员工账号处理玩家报告、审核知识内容。",
     email: "邮箱", password: "密码", signIn: "登录", missionOperations: "任务控制台",
     overview: "玩家支持概览", signOut: "退出登录", inbox: "实时消息", playerReports: "玩家会话",
-    refresh: "刷新", approvedAnswers: "已审核内容", knowledge: "知识库", newArticle: "新建条目",
-    knowledgeReview: "知识审核", close: "关闭", title: "标题", verifiedFacts: "回答 / 已核实信息",
+    refresh: "刷新", approvedAnswers: "已审核内容", knowledge: "知识库", newArticle: "新建正文",
+    knowledgeReview: "文档知识库", close: "关闭", title: "标题", verifiedFacts: "正文 / 已核实信息",
     sourceUrl: "来源链接", draftHint: "保存后为草稿。核对来源后再发布。", saveDraft: "保存草稿",
     reviseArticle: "编辑条目", openReports: "未关闭报告", allReports: "报告总数",
     publishedArticles: "已发布条目", conversations: "近 30 天会话", noReports: "暂无玩家报告。",
@@ -179,14 +178,22 @@ function uploadDocument(path, method, form, widget) {
     let timer = null;
     let active = true;
     let polling = false;
-    const stop = () => { active = false; if (timer) clearInterval(timer); };
+    let pollErrors = 0;
+    const deadline = setTimeout(() => { stop(); reject(new Error(t("requestFailed"))); }, 15 * 60 * 1000);
+    const stop = () => { active = false; if (timer) clearInterval(timer); clearTimeout(deadline); };
     const poll = async () => {
       if (!active || polling) return;
       polling = true;
       try {
         const state = await api(`/admin/document-uploads/${uploadId}`);
-        if (active) setUploadProgress(widget, state.phase, state.percent);
-      } catch (_) { /* The upload may still be entering the API. */ }
+        if (!active) return;
+        pollErrors = 0;
+        setUploadProgress(widget, state.phase, state.percent);
+        if (state.status === "completed") { stop(); resolve(state); }
+        if (state.status === "failed") { stop(); reject(new Error(t("requestFailed"))); }
+      } catch (error) {
+        if (++pollErrors >= 10) { stop(); reject(error); }
+      }
       finally { polling = false; }
     };
     setUploadProgress(widget, "uploading", 0);
@@ -199,18 +206,17 @@ function uploadDocument(path, method, form, widget) {
       }
     };
     xhr.upload.onload = () => {
-      setUploadProgress(widget, "parsing", 30);
-      timer = setInterval(poll, 1000);
-      poll();
+      setUploadProgress(widget, "queued", 30);
     };
     xhr.onload = () => {
-      stop();
       let payload = {};
       try { payload = JSON.parse(xhr.responseText); } catch (_) { /* Empty error response. */ }
       if (xhr.status >= 200 && xhr.status < 300) {
-        setUploadProgress(widget, "completed", 100);
-        resolve(payload);
+        setUploadProgress(widget, payload.phase || "queued", payload.percent || 30);
+        timer = setInterval(poll, 1000);
+        poll();
       } else {
+        stop();
         setUploadProgress(widget, "failed", widget.bar.value);
         reject(new Error(errorText(payload.detail, `${t("requestFailed")} (${xhr.status})`)));
       }
@@ -218,6 +224,16 @@ function uploadDocument(path, method, form, widget) {
     xhr.onerror = () => { stop(); setUploadProgress(widget, "failed", widget.bar.value); reject(new Error(t("connectionFailed"))); };
     xhr.send(form);
   });
+}
+async function waitForIndex(uploadId, widget) {
+  for (let attempt = 0; attempt < 900; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const state = await api(`/admin/document-uploads/${uploadId}`);
+    setUploadProgress(widget, state.phase, state.percent);
+    if (state.status === "completed") return state;
+    if (state.status === "failed") throw new Error(t("requestFailed"));
+  }
+  throw new Error(t("requestFailed"));
 }
 async function api(path, options = {}) {
   let response;
@@ -241,15 +257,15 @@ function applyLanguage() {
   document.querySelectorAll("[data-i18n]").forEach((node) => { node.textContent = t(node.dataset.i18n); });
   document.querySelectorAll("[data-i18n-aria]").forEach((node) => { node.setAttribute("aria-label", t(node.dataset.i18nAria)); });
   if (dashboardData) renderDashboard();
-  if ($("#knowledge-dialog").open) $("#knowledge-form-title").textContent = t(selectedArticle ? "reviseArticle" : "newArticle");
+  if ($("#knowledge-dialog").open) $("#knowledge-form-title").textContent = t("newArticle");
 }
 function renderDashboard() {
-  const { stats, tickets, knowledge, documents, quality } = dashboardData;
+  const { stats, tickets, documents, quality } = dashboardData;
   const statsBox = $("#stats");
   statsBox.replaceChildren();
   for (const [label, value] of [
     ["openReports", stats.open_tickets], ["allReports", stats.total_tickets],
-    ["publishedArticles", stats.published_articles], ["conversations", stats.conversations_30d]
+    ["documents", stats.published_documents], ["conversations", stats.conversations_30d]
   ]) {
     const card = el("div", "", "stat");
     card.append(el("strong", String(value)), el("span", t(label)));
@@ -258,18 +274,17 @@ function renderDashboard() {
   let qualityBox = $("#quality");
   if (!qualityBox) { qualityBox = el("div", "", "quality-strip"); qualityBox.id = "quality"; statsBox.after(qualityBox); }
   qualityBox.replaceChildren(el("strong", `${t("quality")}: `));
-  for (const [label, value] of [["positive", quality.positive_feedback], ["negative", quality.negative_feedback], ["staleArticles", quality.stale_articles], ["staleDocuments", quality.stale_documents], ["waiting", quality.unassigned_tickets]]) {
+  for (const [label, value] of [["positive", quality.positive_feedback], ["negative", quality.negative_feedback], ["staleDocuments", quality.stale_documents], ["waiting", quality.unassigned_tickets]]) {
     qualityBox.append(el("span", `${t(label)} ${value}`));
   }
   renderTickets(tickets);
-  renderKnowledge(knowledge);
   renderDocuments(documents);
 }
 async function loadDashboard() {
-  const [stats, tickets, knowledge, documents, quality] = await Promise.all([
-    api("/admin/overview"), api("/admin/tickets"), api("/admin/knowledge"), api("/admin/documents"), api("/admin/quality")
+  const [stats, tickets, documents, quality] = await Promise.all([
+    api("/admin/overview"), api("/admin/tickets"), api("/admin/documents"), api("/admin/quality")
   ]);
-  dashboardData = { stats, tickets, knowledge, documents, quality };
+  dashboardData = { stats, tickets, documents, quality };
   showDashboard();
   renderDashboard();
 }
@@ -510,8 +525,16 @@ function renderDocuments(documents) {
     }
     const reindex = el("button", t("reindex"));
     reindex.addEventListener("click", async () => {
-      try { await api(`/admin/documents/${document.id}/reindex`, { method: "POST" }); await loadDashboard(); }
+      reindex.disabled = true;
+      const progress = createUploadProgress(item);
+      try {
+        const job = await api(`/admin/documents/${document.id}/reindex`, { method: "POST" });
+        setUploadProgress(progress, "queued", 30);
+        await waitForIndex(job.id, progress);
+        await loadDashboard();
+      }
       catch (error) { toast(error.message); }
+      finally { reindex.disabled = false; }
     });
     const remove = el("button", t("remove"));
     remove.addEventListener("click", async () => {
@@ -588,48 +611,9 @@ async function appendImageReview(review, document, images) {
   review.append(section);
 }
 function documentNode(tag) { return window.document.createElement(tag); }
-function renderKnowledge(knowledge) {
-  const list = $("#admin-knowledge");
-  list.replaceChildren();
-  if (!knowledge.length) { list.append(el("p", t("noKnowledge"), "empty")); return; }
-  for (const article of knowledge) {
-    const item = el("article", "", "admin-item");
-    item.append(
-      el("h4", article.title),
-      el("small", `${t(article.status)} · v${article.version} · ${formatDate(article.updated_at)}`),
-      el("p", article.content)
-    );
-    if (article.review_due_at && new Date(article.review_due_at) <= new Date()) item.append(el("span", t("overdue"), "overdue-badge"));
-    const source = el("a", t("viewSource"));
-    source.href = article.source_url;
-    source.target = "_blank";
-    source.rel = "noopener noreferrer";
-    item.append(source);
-    const actions = el("div", "", "admin-item-actions");
-    const edit = el("button", t("editDraft"));
-    edit.addEventListener("click", () => openArticle(article));
-    actions.append(edit);
-    if (article.status !== "published") {
-      const publish = el("button", t("publish"));
-      publish.addEventListener("click", async () => {
-        try {
-          await api(`/admin/knowledge/${article.id}/publish`, { method: "POST" });
-          toast(t("articlePublished"));
-          await loadDashboard();
-        } catch (error) { toast(error.message); }
-      });
-      actions.append(publish);
-    }
-    item.append(actions);
-    list.append(item);
-  }
-}
-function openArticle(article = null) {
-  selectedArticle = article;
-  $("#knowledge-form-title").textContent = t(article ? "reviseArticle" : "newArticle");
-  $("#knowledge-title").value = article?.title || "";
-  $("#knowledge-content").value = article?.content || "";
-  $("#knowledge-url").value = article?.source_url || "";
+function openArticle() {
+  $("#knowledge-form-title").textContent = t("newArticle");
+  $("#knowledge-form").reset();
   $("#knowledge-dialog").showModal();
 }
 
@@ -672,6 +656,7 @@ $("#logout").addEventListener("click", () => {
 $("#refresh-admin").addEventListener("click", () => loadDashboard().catch((error) => toast(error.message)));
 $("#new-article").addEventListener("click", () => openArticle());
 const documentUploadProgress = createUploadProgress($("#document-form"));
+const textUploadProgress = createUploadProgress($("#knowledge-form"));
 $("#document-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const selectedFile = $("#document-file").files[0];
@@ -695,18 +680,21 @@ $("#document-form").addEventListener("submit", async (event) => {
 $("#close-knowledge").addEventListener("click", () => $("#knowledge-dialog").close());
 $("#knowledge-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const body = {
-    title: $("#knowledge-title").value.trim(),
-    content: $("#knowledge-content").value.trim(),
-    source_url: $("#knowledge-url").value.trim()
-  };
+  const form = new FormData();
+  form.append("title", $("#knowledge-title").value.trim());
+  form.append("file", new File([$("#knowledge-content").value.trim()], "staff-knowledge.txt", { type: "text/plain" }));
+  if ($("#knowledge-url").value.trim()) form.append("source_url", $("#knowledge-url").value.trim());
+  form.append("source_type", "official");
+  form.append("language", languageSelect.value);
+  const submit = $("#knowledge-form button[type=submit]");
+  submit.disabled = true;
   try {
-    const path = selectedArticle ? `/admin/knowledge/${selectedArticle.id}` : "/admin/knowledge";
-    await api(path, { method: selectedArticle ? "PUT" : "POST", body: JSON.stringify(body) });
+    await uploadDocument("/admin/documents", "POST", form, textUploadProgress);
     $("#knowledge-dialog").close();
     toast(t("draftSaved"));
     await loadDashboard();
   } catch (error) { toast(error.message); }
+  finally { submit.disabled = false; }
 });
 async function watchEvents() {
   const sessionToken = adminToken;

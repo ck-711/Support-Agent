@@ -25,6 +25,7 @@ pytestdebug.log
 
 # Virtual environments
 .venv
+.uv-cache/
 venv
 ENV/
 env/

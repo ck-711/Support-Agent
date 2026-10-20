@@ -19,9 +19,9 @@ services:
     networks:
       - monitoring
 
-  # Valkey (Redis-compatible) cache — optional, set VALKEY_HOST=valkey in your .env to enable
+  # Valkey provides the Redis-compatible Celery broker and optional app cache.
   valkey:
-    image: valkey/valkey:8.1.6-alpine
+    image: ghcr.io/valkey-io/valkey@sha256:a038175878d66b9d274fbf8be73c0305e93798b83917647f167e18cef3c71eec
     ports:
       - "6379:6379"
     volumes:
@@ -125,6 +125,7 @@ services:
       - POSTGRES_HOST=db
       - SUPPORT_MINIO_ENDPOINT=minio:9000
       - SUPPORT_MILVUS_URI=http://milvus:19530
+      - SUPPORT_CELERY_BROKER_URL=redis://valkey:6379/1
     depends_on:
       db:
         condition: service_healthy
@@ -132,12 +133,45 @@ services:
         condition: service_started
       milvus:
         condition: service_healthy
+      valkey:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    restart: on-failure
+    networks:
+      - monitoring
+
+  support-worker:
+    build:
+      context: .
+      args:
+        APP_ENV: ${APP_ENV:-development}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-deb.debian.org}
+    command: ["/app/.venv/bin/celery", "-A", "app.services.support_tasks:celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    volumes:
+      - ./app:/app/app
+      - ./logs:/app/logs
+    env_file:
+      - .env.${APP_ENV:-development}
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - POSTGRES_HOST=db
+      - SUPPORT_MINIO_ENDPOINT=minio:9000
+      - SUPPORT_MILVUS_URI=http://milvus:19530
+      - SUPPORT_CELERY_BROKER_URL=redis://valkey:6379/1
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      milvus:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
     restart: on-failure
     networks:
       - monitoring

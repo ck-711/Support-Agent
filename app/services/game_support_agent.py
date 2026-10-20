@@ -19,9 +19,8 @@ from app.models.support import SupportKnowledge
 from app.schemas.support import SourceReference
 from app.services.llm import llm_service
 from app.services.llm.registry import LLMRegistry
-from app.services.support_documents import RetrievedPassage, search_documents, search_support_vectors
-from app.services.support_images import search_images
-from app.services.support_store import list_knowledge
+from app.services.support_documents_v2 import RetrievedPassage, search_documents, search_support_vectors
+from app.services.support_images_v2 import search_images
 from app.services.support_tools import TOOL_SCHEMAS, execute_support_tool
 
 
@@ -179,11 +178,8 @@ async def _retrieve(state: SupportState) -> SupportState:
     passages = await search_support_vectors(question)
     if passages:
         return {"articles": [], "passages": passages}
-    entries = await list_knowledge(published_only=True)
-    ranked = sorted(entries, key=lambda article: _score(article, question), reverse=True)
     documents, images = await asyncio.gather(search_documents(question), search_images(question))
-    return {"articles": [article for article in ranked[:12] if _score(article, question) > 0],
-            "passages": [*documents, *images]}
+    return {"articles": [], "passages": [*documents, *images]}
 
 
 async def _call_tools(state: SupportState) -> SupportState:
