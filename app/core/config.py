@@ -133,10 +133,10 @@ class Settings:
         self.ENVIRONMENT = get_environment()
 
         # Application Settings
-        self.PROJECT_NAME = os.getenv("PROJECT_NAME", "FastAPI LangGraph Template")
+        self.PROJECT_NAME = os.getenv("PROJECT_NAME", "DOTS Survivors Support")
         self.VERSION = os.getenv("VERSION", "1.0.0")
         self.DESCRIPTION = os.getenv(
-            "DESCRIPTION", "A production-ready FastAPI template with LangGraph and Langfuse integration"
+            "DESCRIPTION", "Official DOTS Survivors player support with sourced AI answers and staff tickets"
         )
         self.API_V1_STR = os.getenv("API_V1_STR", "/api/v1")
         self.DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "t", "yes")
@@ -158,9 +158,7 @@ class Settings:
         # LangGraph Configuration
         self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
         self.DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
-        self.DASHSCOPE_BASE_URL = os.getenv(
-            "DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        )
+        self.DASHSCOPE_BASE_URL = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
         self.DEFAULT_LLM_MODEL = os.getenv("DEFAULT_LLM_MODEL", "gpt-5.6-luna")
         self.SESSION_NAMING_ENABLED = os.getenv("SESSION_NAMING_ENABLED", "true").lower() == "true"
         self.DEFAULT_LLM_TEMPERATURE = float(os.getenv("DEFAULT_LLM_TEMPERATURE", "0.2"))
@@ -195,6 +193,31 @@ class Settings:
         self.POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
         self.POSTGRES_POOL_SIZE = int(os.getenv("POSTGRES_POOL_SIZE", "20"))
         self.POSTGRES_MAX_OVERFLOW = int(os.getenv("POSTGRES_MAX_OVERFLOW", "10"))
+        self.SUPPORT_ADMIN_USER_IDS = os.getenv("SUPPORT_ADMIN_USER_IDS", "")
+        self.SUPPORT_LLM_TIMEOUT_SECONDS = float(os.getenv("SUPPORT_LLM_TIMEOUT_SECONDS", "20"))
+        self.SUPPORT_OCR_COMMAND = os.getenv("SUPPORT_OCR_COMMAND", "tesseract")
+        self.SUPPORT_OCR_LANGUAGES = os.getenv("SUPPORT_OCR_LANGUAGES", "chi_sim+eng+spa")
+        self.SUPPORT_MINIO_ENDPOINT = os.getenv("SUPPORT_MINIO_ENDPOINT", "localhost:19000")
+        self.SUPPORT_MINIO_BUCKET = os.getenv("SUPPORT_MINIO_BUCKET", "support-images")
+        self.SUPPORT_MINIO_ACCESS_KEY = os.getenv("SUPPORT_MINIO_ACCESS_KEY", "")
+        self.SUPPORT_MINIO_SECRET_KEY = os.getenv("SUPPORT_MINIO_SECRET_KEY", "")
+        self.SUPPORT_MINIO_SECURE = os.getenv("SUPPORT_MINIO_SECURE", "false").lower() == "true"
+        self.SUPPORT_VISION_MODEL = os.getenv("SUPPORT_VISION_MODEL", "qwen3-vl-plus" if self.DASHSCOPE_API_KEY else "")
+        self.SUPPORT_VISION_API_KEY = os.getenv("SUPPORT_VISION_API_KEY", self.DASHSCOPE_API_KEY or self.OPENAI_API_KEY)
+        self.SUPPORT_VISION_BASE_URL = os.getenv("SUPPORT_VISION_BASE_URL", self.DASHSCOPE_BASE_URL if self.DASHSCOPE_API_KEY else "")
+        self.SUPPORT_EMBEDDING_MODEL = os.getenv(
+            "SUPPORT_EMBEDDING_MODEL", "text-embedding-v3" if self.DASHSCOPE_API_KEY else "text-embedding-3-small"
+        )
+        self.SUPPORT_EMBEDDING_API_KEY = os.getenv(
+            "SUPPORT_EMBEDDING_API_KEY", self.DASHSCOPE_API_KEY or self.OPENAI_API_KEY
+        )
+        self.SUPPORT_EMBEDDING_BASE_URL = os.getenv(
+            "SUPPORT_EMBEDDING_BASE_URL", self.DASHSCOPE_BASE_URL if self.DASHSCOPE_API_KEY else ""
+        )
+        self.SUPPORT_EMBEDDING_DIMENSIONS = int(os.getenv("SUPPORT_EMBEDDING_DIMENSIONS", "1024"))
+        self.SUPPORT_MILVUS_URI = os.getenv("SUPPORT_MILVUS_URI", "http://localhost:19530")
+        self.SUPPORT_MILVUS_TOKEN = os.getenv("SUPPORT_MILVUS_TOKEN", "")
+        self.SUPPORT_MILVUS_COLLECTION = os.getenv("SUPPORT_MILVUS_COLLECTION", "support_knowledge_v1")
         self.CHECKPOINT_TABLES = ["checkpoint_blobs", "checkpoint_writes", "checkpoints"]
 
         # Valkey/Redis Cache Configuration (optional — if host is set, caching is enabled)

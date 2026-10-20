@@ -42,6 +42,23 @@ make migrate       # creates tables via Alembic
 make dev           # starts server with hot reload on port 8000
 ```
 
+### Windows PowerShell
+
+The Makefile uses GNU Make and Bash, which are not included with PowerShell. From the repository root, use the project virtual environment directly:
+
+```powershell
+Copy-Item .env.example .env.development
+# Set JWT_SECRET_KEY, a model API key, and POSTGRES_* in .env.development.
+# Use POSTGRES_HOST=localhost for a database running on this machine.
+uv sync
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Open the locally running API at `http://127.0.0.1:8000/docs`. On machines where Docker or WSL also listens on port 8000 over IPv6, `localhost` can reach a different API instance.
+
+For Docker Compose from PowerShell, run `docker compose --env-file .env.development up -d --build db app`, then `docker compose --env-file .env.development exec app /app/.venv/bin/alembic upgrade head`. The container uses `POSTGRES_HOST=db` automatically.
+
 ## Your first API call
 
 ### 1. Register a user

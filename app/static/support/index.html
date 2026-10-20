@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123047">
+  <link rel="icon" href="/support/assets/favicon.svg" type="image/svg+xml">
+  <title>DOTS Survivors · Player support</title>
+  <link rel="stylesheet" href="/support/assets/support.css?v=13">
+  <script defer src="/support/assets/player.js?v=10"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/support" aria-label="DOTS Survivors support home"><span class="brand-mark">✦</span><span>DOTS<br><strong>SURVIVORS</strong></span></a>
+      <div class="sidebar-label" data-i18n="sidebarLabel">PLAYER SUPPORT / MISSION CONTROL</div>
+      <div class="sidebar-copy"><span class="eyebrow" data-i18n="openChannel">OPEN CHANNEL</span><h1 data-i18n="hero">Need a hand out there?</h1><p data-i18n="heroCopy">Ask about the game, report an issue, or check a reply from the support team.</p></div>
+      <div class="sidebar-bottom"><span class="signal"><span class="signal-dot"></span> <span data-i18n="signal">SUPPORT SIGNAL ONLINE</span></span><a href="https://store.steampowered.com/app/3326810/DOTS_Survivors/" target="_blank" rel="noopener noreferrer" data-i18n="steam">View on Steam ↗</a></div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar"><div><span class="eyebrow">DOTS SURVIVORS</span><h2 data-i18n="pageTitle">Player support</h2></div><div class="topbar-actions"><label for="language" data-i18n="language">Language</label><select id="language"><option value="en">English</option><option value="es">Español</option><option value="zh">中文</option></select><button id="player-logout" class="text-button" type="button" hidden></button><a class="admin-link" href="/support/admin" data-i18n="staff">Staff ↗</a></div></header>
+      <section id="player-auth" class="player-auth login-panel">
+        <span class="eyebrow" id="auth-eyebrow"></span><h3 id="auth-title"></h3><p id="auth-hint"></p>
+        <form id="player-auth-form">
+          <label><span id="auth-email-label"></span><input id="player-email" type="email" autocomplete="username" required></label>
+          <label id="player-name-row" hidden><span id="auth-name-label"></span><input id="player-name" maxlength="50" autocomplete="nickname"></label>
+          <label><span id="auth-password-label"></span><input id="player-password" type="password" autocomplete="current-password" required></label>
+          <button id="auth-submit" class="primary-button" type="submit"></button>
+        </form>
+        <button id="auth-switch" class="text-button" type="button"></button>
+      </section>
+      <div id="support-content" class="content-grid" hidden>
+        <section class="chat-panel" aria-label="Support conversation">
+          <div class="panel-heading"><div><span class="eyebrow" data-i18n="channel">CHANNEL 01</span><h3 data-i18n="talk">Talk to support</h3></div><span class="ai-pill" data-i18n="ai">AI assistant</span></div>
+          <div id="handoff-status" class="handoff-status" role="status" hidden></div>
+          <button id="load-earlier" class="history-button" type="button" hidden></button>
+          <div id="messages" class="messages" aria-live="polite"></div>
+          <div class="quick-actions"><button type="button" data-prompt="What are the minimum system requirements?" data-i18n="requirements">System requirements</button><button type="button" data-prompt="Which weapons are in the game?" data-i18n="weapons">Weapons</button><button type="button" data-prompt="How do I report an achievement issue?" data-i18n="achievements">Achievements</button></div>
+          <form id="chat-form" class="composer"><label class="sr-only" for="message-input" data-i18n="yourMessage">Your message</label><textarea id="message-input" maxlength="4000" rows="2" placeholder="Tell us what you need help with…" data-i18n-placeholder="messagePlaceholder" required></textarea><button id="send-button" type="submit" aria-label="Send message"><span data-i18n="send">Send</span> <span aria-hidden="true">↗</span></button></form>
+          <p class="fine-print" data-i18n="privacyNote">Official AI support. Answers use published information; the team reviews reported issues. Do not include passwords or payment details.</p>
+        </section>
+        <aside class="tools-panel" aria-label="Support options">
+          <section class="tool-card feature-card"><span class="eyebrow" data-i18n="somethingBroke">WHEN SOMETHING BREAKS</span><h3 data-i18n="reportIssue">Report an issue</h3><p data-i18n="reportCopy">Tell the team what happened. Include your game version and device details if you know them.</p><button id="show-report" class="outline-button" type="button"><span data-i18n="createReport">Create report</span> <span>↗</span></button></section>
+          <section class="tool-card"><div class="card-title"><span class="eyebrow" data-i18n="yourReports">YOUR REPORTS</span><button id="refresh-tickets" class="text-button" type="button" data-i18n="refresh">Refresh</button></div><div id="ticket-list" class="ticket-list"><p class="empty">No reports yet.</p></div></section>
+          <section class="tool-card"><span class="eyebrow" data-i18n="dataControl">DATA CONTROL</span><h3 data-i18n="yourConversation">Your conversation</h3><p data-i18n="retention">This session and its reports are kept for up to 30 days. You can erase them now.</p><button id="delete-data" class="text-button danger" type="button" data-i18n="delete">Delete my conversation</button></section>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <dialog id="report-dialog" class="report-dialog"><form id="report-form" method="dialog"><div class="dialog-head"><div><span class="eyebrow" data-i18n="issueReport">ISSUE REPORT</span><h2 data-i18n="whatHappenedTitle">Tell us what happened</h2></div><button id="close-report" class="icon-button" type="button" aria-label="Close">×</button></div><label><span data-i18n="issueType">Issue type</span><select id="report-category"><option value="bug" data-i18n="bug">Bug</option><option value="achievement" data-i18n="achievement">Achievement</option><option value="save" data-i18n="save">Save or cloud sync</option><option value="performance" data-i18n="performance">Performance</option><option value="other" data-i18n="other">Other</option></select></label><label><span data-i18n="whatHappened">What happened?</span><textarea id="report-summary" minlength="10" maxlength="4000" rows="5" required placeholder="What did you expect, and what happened instead?" data-i18n-placeholder="reportPlaceholder"></textarea></label><div class="form-row"><label><span data-i18n="gameVersion">Game version</span> <input id="report-version" maxlength="64" placeholder="If known" data-i18n-placeholder="ifKnown"></label><label><span data-i18n="device">Device / OS</span> <input id="report-device" maxlength="500" placeholder="If known" data-i18n-placeholder="ifKnown"></label></div><p class="fine-print" data-i18n="reportPrivacy">Please avoid personal information. You can follow the report in this browser session.</p><button class="primary-button" type="submit" data-i18n="sendReport">Send report</button></form></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

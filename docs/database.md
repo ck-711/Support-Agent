@@ -50,6 +50,8 @@ All schema changes are managed through Alembic. The app no longer calls `create_
 make migrate              # applies all migrations to the database
 ```
 
+On Windows PowerShell, GNU Make is usually unavailable. With dependencies installed by `uv sync` and a configured `.env.development`, run `.\.venv\Scripts\python.exe -m alembic upgrade head` from the repository root. Set `POSTGRES_HOST=localhost` for a local PostgreSQL server.
+
 ### Creating a migration after model changes
 
 ```bash

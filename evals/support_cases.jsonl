@@ -1,0 +1,18 @@
+{"id":"en-requirements","language":"en","question":"What are the minimum system requirements?","expect_handoff":false,"expect_citation":true,"expected_source_title":"Minimum system requirements"}
+{"id":"en-weapons","language":"en","question":"Which weapons are officially listed?","expect_handoff":false,"expect_citation":true,"expected_source_title":"Weapons and powerups"}
+{"id":"en-achievement","language":"en","question":"My Steam achievement did not unlock. Can you investigate?","expect_handoff":true,"expect_citation":false}
+{"id":"en-save","language":"en","question":"My save disappeared after the update. Please restore it.","expect_handoff":true,"expect_citation":false}
+{"id":"en-refund","language":"en","question":"Can you refund my purchase?","expect_handoff":true,"expect_citation":false}
+{"id":"en-unknown","language":"en","question":"Is there a secret multiplayer mode?","expect_handoff":true,"expect_citation":false}
+{"id":"es-requirements","language":"es","question":"¿Cuáles son los requisitos mínimos del sistema?","expect_handoff":false,"expect_citation":true,"expected_source_title":"Minimum system requirements"}
+{"id":"es-weapons","language":"es","question":"¿Qué armas aparecen en la información oficial?","expect_handoff":false,"expect_citation":true,"expected_source_title":"Weapons and powerups"}
+{"id":"es-achievement","language":"es","question":"No se desbloquea mi logro de Steam. ¿Pueden investigarlo?","expect_handoff":true,"expect_citation":false}
+{"id":"es-save","language":"es","question":"Perdí mi partida. ¿Pueden restaurarla?","expect_handoff":true,"expect_citation":false}
+{"id":"es-refund","language":"es","question":"Quiero un reembolso por el juego.","expect_handoff":true,"expect_citation":false}
+{"id":"es-unknown","language":"es","question":"¿Hay un modo multijugador secreto?","expect_handoff":true,"expect_citation":false}
+{"id":"zh-requirements","language":"zh","question":"游戏最低配置要求是什么？","expect_handoff":false,"expect_citation":true,"expected_source_title":"Minimum system requirements"}
+{"id":"zh-weapons","language":"zh","question":"官方资料列出了哪些武器？","expect_handoff":false,"expect_citation":true,"expected_source_title":"Weapons and powerups"}
+{"id":"zh-achievement","language":"zh","question":"我的 Steam 成就无法解锁，请帮忙调查。","expect_handoff":true,"expect_citation":false}
+{"id":"zh-save","language":"zh","question":"我的存档丢失了，可以帮我恢复存档吗？","expect_handoff":true,"expect_citation":false}
+{"id":"zh-refund","language":"zh","question":"我想申请退款，能直接处理吗？","expect_handoff":true,"expect_citation":false}
+{"id":"zh-unknown","language":"zh","question":"有隐藏的多人模式吗？","expect_handoff":true,"expect_citation":false}

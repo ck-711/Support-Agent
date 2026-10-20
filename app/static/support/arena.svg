@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 560" role="img" aria-label="Astronaut facing alien waves">
+  <defs>
+    <pattern id="ground" width="48" height="48" patternUnits="userSpaceOnUse">
+      <rect width="48" height="48" fill="#247e78"/>
+      <path d="M0 47h48M47 0v48" stroke="#1b6867" stroke-width="2" opacity=".55"/>
+      <path d="M8 10h5v4H8zm27 25h6v4h-6z" fill="#3b9b89" opacity=".75"/>
+    </pattern>
+    <radialGradient id="field"><stop stop-color="#48a799" stop-opacity=".6"/><stop offset="1" stop-color="#102c39" stop-opacity=".3"/></radialGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="9" stdDeviation="2" flood-color="#102d35" flood-opacity=".55"/></filter>
+  </defs>
+  <rect width="720" height="560" fill="url(#ground)"/>
+  <rect width="720" height="560" fill="url(#field)"/>
+  <path d="M-20 129l120-17 64 42-18 69-76 15-90-39zM575 9l92 19 55 61-31 51-95-4-52-67zM515 433l85-40 122 47v121H553z" fill="#2c8b7b" opacity=".55"/>
+  <g fill="#165d5c" opacity=".75"><path d="M110 331h23v7h-23zm10-9h7v20h-7zM611 311h23v7h-23zm10-9h7v20h-7zM43 48h19v6H43zm7-7h6v20h-6zM503 128h24v7h-24zm9-9h7v24h-7z"/></g>
+  <g fill="#f4d268" stroke="#f8eca8" stroke-width="3">
+    <path d="M187 110l7 12 13 3-13 4-7 13-7-13-13-4 13-3z"/>
+    <path d="M550 207l6 10 11 3-11 4-6 11-6-11-11-4 11-3z"/>
+    <path d="M184 422l5 9 9 3-9 3-5 9-5-9-9-3 9-3z"/>
+  </g>
+  <g fill="#7ddadc" stroke="#d5f8df" stroke-width="3"><path d="M480 71l11 13-11 14-11-14zM67 450l10 12-10 12-10-12zM610 460l10 12-10 12-10-12z"/></g>
+  <g transform="translate(122 200)" filter="url(#shadow)">
+    <path d="M0-33l17 11 17-2 2 17 12 14-14 8-8 17-18-7-18 5-8-18-15-10 14-14 1-17z" fill="#dc733d" stroke="#823b3a" stroke-width="5"/>
+    <ellipse cx="1" cy="-1" rx="18" ry="15" fill="#f6a04b"/><path d="M-12-3h8m11 0h8" stroke="#472c46" stroke-width="5" stroke-linecap="square"/>
+  </g>
+  <g transform="translate(596 177) scale(.86)" filter="url(#shadow)">
+    <path d="M0-33l17 11 17-2 2 17 12 14-14 8-8 17-18-7-18 5-8-18-15-10 14-14 1-17z" fill="#dc733d" stroke="#823b3a" stroke-width="5"/>
+    <ellipse cx="1" cy="-1" rx="18" ry="15" fill="#f6a04b"/><path d="M-12-3h8m11 0h8" stroke="#472c46" stroke-width="5" stroke-linecap="square"/>
+  </g>
+  <g transform="translate(566 402) scale(1.08)" filter="url(#shadow)">
+    <path d="M0-33l17 11 17-2 2 17 12 14-14 8-8 17-18-7-18 5-8-18-15-10 14-14 1-17z" fill="#d76943" stroke="#823b3a" stroke-width="5"/>
+    <ellipse cx="1" cy="-1" rx="18" ry="15" fill="#f6a04b"/><path d="M-12-3h8m11 0h8" stroke="#472c46" stroke-width="5" stroke-linecap="square"/>
+  </g>
+  <g transform="translate(190 376) scale(.75)" filter="url(#shadow)">
+    <path d="M0-33l17 11 17-2 2 17 12 14-14 8-8 17-18-7-18 5-8-18-15-10 14-14 1-17z" fill="#dc733d" stroke="#823b3a" stroke-width="5"/>
+    <ellipse cx="1" cy="-1" rx="18" ry="15" fill="#f6a04b"/><path d="M-12-3h8m11 0h8" stroke="#472c46" stroke-width="5" stroke-linecap="square"/>
+  </g>
+  <path d="M350 275L239 225m135 1 132-59m-91 151 118 72" stroke="#f6e38b" stroke-width="7" stroke-linecap="round" stroke-dasharray="21 15" opacity=".9"/>
+  <g transform="translate(359 278)" filter="url(#shadow)">
+    <ellipse cy="39" rx="59" ry="21" fill="#124e58" opacity=".6"/>
+    <path d="M-33 19l-25 15 9 14 28-12zm64 0 24 15-8 14-28-12z" fill="#5f4ca2" stroke="#332f63" stroke-width="5"/>
+    <path d="M-35-9h70l7 51-34 12-43-12z" fill="#765fbb" stroke="#382e67" stroke-width="6"/>
+    <rect x="-24" y="17" width="48" height="16" rx="3" fill="#a894df"/><path d="M-8 21h16m-16 6h16" stroke="#453472" stroke-width="3"/>
+    <path d="M-38-31l10-25h56l10 25-5 31-28 12-36-12z" fill="#e9f0e6" stroke="#42496b" stroke-width="6"/>
+    <path d="M-26-30h52l-4 29H-24z" fill="#315b6e" stroke="#65888d" stroke-width="3"/><path d="M-14-24h16" stroke="#8ddad7" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-17-59h34v9h-34z" fill="#f2c66b"/>
+  </g>
+  <g font-family="Arial, sans-serif" font-weight="900"><rect x="253" y="374" width="212" height="20" rx="3" fill="#183b45" stroke="#d8e9d5" stroke-width="3"/><rect x="258" y="379" width="150" height="10" fill="#e87165"/><text x="270" y="368" fill="#eff7e8" font-size="16" letter-spacing="2">SUPPORT // ONLINE</text></g>
+  <path d="M16 16h48M16 16v48m640-48h48m0 0v48M16 496v48h48m592 0h48v-48" fill="none" stroke="#e9e8ca" stroke-width="5" opacity=".65"/>
+</svg>

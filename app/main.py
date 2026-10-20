@@ -1,7 +1,9 @@
 """This file contains the main application entry point."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import (
@@ -12,6 +14,8 @@ from fastapi import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -32,6 +36,22 @@ from app.core.middleware import (
 from app.core.observability import langfuse_init
 from app.services.database import database_service
 from app.services.memory import memory_service
+from app.services.support_milvus import close as close_support_milvus, ensure_collection as ensure_support_milvus
+from app.services.support_store import engine as support_engine, purge_expired
+
+SUPPORT_ASSETS = Path(__file__).resolve().parent / "static" / "support"
+
+
+async def support_retention_loop() -> None:
+    """Erase expired support records daily."""
+    while True:
+        try:
+            removed = await purge_expired()
+            if removed:
+                logger.info("support_records_expired", count=removed)
+        except Exception:
+            logger.exception("support_retention_failed")
+        await asyncio.sleep(24 * 60 * 60)
 
 # Load environment variables
 load_dotenv()
@@ -69,10 +89,25 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.exception("memory_service_pre_warm_failed", error=str(e))
 
+    try:
+        await ensure_support_milvus()
+        logger.info("support_milvus_ready")
+    except Exception:
+        logger.exception("support_milvus_initialization_failed")
+
+    retention_task = asyncio.create_task(support_retention_loop())
+
     yield
 
     # Cleanup on shutdown
     await cache_service.close()
+    retention_task.cancel()
+    try:
+        await retention_task
+    except asyncio.CancelledError:
+        pass
+    await support_engine.dispose()
+    await close_support_milvus()
     if agent._connection_pool:
         await agent._connection_pool.close()
         logger.info("connection_pool_closed")
@@ -151,6 +186,21 @@ app.add_middleware(
 
 # Include API router
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.mount("/support/assets", StaticFiles(directory=SUPPORT_ASSETS), name="support-assets")
+
+
+@app.get("/support", include_in_schema=False)
+@limiter.limit("60/minute")
+async def support_page(request: Request) -> FileResponse:
+    """Serve the player support interface."""
+    return FileResponse(SUPPORT_ASSETS / "index.html")
+
+
+@app.get("/support/admin", include_in_schema=False)
+@limiter.limit("60/minute")
+async def support_admin_page(request: Request) -> FileResponse:
+    """Serve the staff interface."""
+    return FileResponse(SUPPORT_ASSETS / "admin.html")
 
 
 @app.get("/")

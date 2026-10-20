@@ -14,10 +14,19 @@ from app.core.logging import logger
 from app.schemas import Message
 
 # Cache tiktoken encoding at module level — thread-safe and reusable
-try:
-    _TIKTOKEN_ENCODING = tiktoken.encoding_for_model(settings.DEFAULT_LLM_MODEL)
-except KeyError:
-    _TIKTOKEN_ENCODING = tiktoken.get_encoding("cl100k_base")
+_TIKTOKEN_ENCODING: tiktoken.Encoding | None = None
+if settings.DEFAULT_LLM_MODEL.startswith(("gpt-", "openai:")):
+    try:
+        _TIKTOKEN_ENCODING = tiktoken.encoding_for_model(settings.DEFAULT_LLM_MODEL)
+    except Exception:
+        logger.exception("tokenizer_unavailable_using_estimate")
+
+
+def _count_text_tokens(text: str) -> int:
+    """Estimate tokens when a tokenizer asset cannot be loaded offline."""
+    if _TIKTOKEN_ENCODING is None:
+        return max(1, len(text.encode("utf-8")) // 3)
+    return len(_TIKTOKEN_ENCODING.encode(text))
 
 
 def _count_tokens_tiktoken(messages: list) -> int:
@@ -29,17 +38,17 @@ def _count_tokens_tiktoken(messages: list) -> int:
         if isinstance(message, dict):
             for _, value in message.items():
                 if isinstance(value, str):
-                    num_tokens += len(_TIKTOKEN_ENCODING.encode(value))
+                    num_tokens += _count_text_tokens(value)
         elif isinstance(message, BaseMessage):
             content = message.content
             if isinstance(content, str):
-                num_tokens += len(_TIKTOKEN_ENCODING.encode(content))
+                num_tokens += _count_text_tokens(content)
             elif isinstance(content, list):
                 for block in content:
                     if isinstance(block, str):
-                        num_tokens += len(_TIKTOKEN_ENCODING.encode(block))
+                        num_tokens += _count_text_tokens(block)
                     elif isinstance(block, dict) and "text" in block:
-                        num_tokens += len(_TIKTOKEN_ENCODING.encode(block["text"]))
+                        num_tokens += _count_text_tokens(block["text"])
     num_tokens += 2  # every reply is primed with assistant
     return num_tokens
 

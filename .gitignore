@@ -6,6 +6,7 @@ dist/
 wheels/
 *.egg-info
 *.jsonl
+!evals/support_cases.jsonl
 
 # Virtual environments
 .venv

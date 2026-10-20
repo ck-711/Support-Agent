@@ -15,20 +15,28 @@ ENV APP_ENV=${APP_ENV} \
     PIP_DEFAULT_TIMEOUT=100
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+ARG DEBIAN_MIRROR=deb.debian.org
+RUN sed -i "s|deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
+    tesseract-ocr-eng \
+    tesseract-ocr-spa \
     && pip install --upgrade pip \
     && pip install uv \
     && rm -rf /var/lib/apt/lists/*
 
+ENV UV_HTTP_TIMEOUT=120
+
 # Install locked dependencies first (cached unless pyproject.toml / uv.lock change)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project
+RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy the application and install the project itself against the locked deps
 COPY . .
-RUN uv sync --frozen
+RUN uv sync --frozen --no-dev
 
 # Make entrypoint script executable - do this before changing user
 RUN chmod +x /app/scripts/docker-entrypoint.sh

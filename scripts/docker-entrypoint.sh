@@ -49,7 +49,12 @@ else
 fi
 
 # Check required sensitive environment variables
-required_vars=("JWT_SECRET_KEY" "OPENAI_API_KEY")
+required_vars=("JWT_SECRET_KEY")
+if [[ "${DEFAULT_LLM_MODEL:-}" == qwen-* ]]; then
+    required_vars+=("DASHSCOPE_API_KEY")
+elif [[ "${DEFAULT_LLM_MODEL:-}" == gpt-* || "${DEFAULT_LLM_MODEL:-}" == openai:* ]]; then
+    required_vars+=("OPENAI_API_KEY")
+fi
 missing_vars=()
 
 for var in "${required_vars[@]}"; do
