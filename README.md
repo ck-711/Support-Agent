@@ -109,6 +109,24 @@ uv run pytest tests
 
 需要数据库的集成测试须先启动依赖并完成迁移，再设置 `SUPPORT_INTEGRATION=1`。API 位于 `app/api/v1/`，客服业务逻辑位于 `app/services/`，前端静态文件位于 `app/static/support/`，迁移位于 `alembic/versions/`。
 
+## Benchmark / 评测
+
+客服已有 `evals/support_eval.py`：逐条调用当前客服回答流程，统计转人工准确率、漏转/误转、来源引用覆盖和整条回答耗时。运行前需配置应用数据库、知识库和模型；默认数据集 `evals/support_cases.jsonl` 是 18 条中英西语回归样本，可用 `--baseline` 与已有报告比较。
+
+```powershell
+uv run python -m evals.support_eval --output evals/reports/support.json --baseline evals/baselines/v1.3.1.json
+```
+
+现有引用指标只检查预期来源是否出现，不能代替回答事实正确率。18 条样本也不足以支持生产环境准确率结论；扩大样本后需要人工审核预期答案与来源。
+
+`evals/vllm_benchmark.py` 单独请求运行中的 OpenAI 兼容 vLLM 服务，统计流式首内容 token 时间（TTFT）的 P50/P95 和总输出 token/s。默认复用上述问题作为提示词；脚本不经过 LangGraph、Milvus 或客服 API，因此结果仅代表模型服务吞吐。服务必须在流式响应中返回 `usage.completion_tokens`，否则吞吐字段为 `null`；API Key 可从 `VLLM_API_KEY` 环境变量读取，报告不保存密钥。
+
+```powershell
+uv run python -m evals.vllm_benchmark --base-url http://127.0.0.1:8000/v1 --model "YOUR_MODEL_ID" --hardware "YOUR_GPU" --vllm-version "YOUR_VLLM_VERSION" --input evals/support_cases.jsonl --concurrency 4 --max-tokens 256 --output evals/reports/vllm.json
+```
+
+记录 GPU、模型及量化版本、vLLM 版本、输入和输出 token 数、并发数后再比较不同运行结果。本仓库没有针对当前部署运行这项 Benchmark，也没有可据此确认的显卡或模型名称。
+
 ## 文档与许可
 
 - [中文运行指南](docs/game-support.zh-CN.md)
