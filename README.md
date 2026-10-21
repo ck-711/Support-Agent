@@ -25,18 +25,37 @@
 
 ```mermaid
 flowchart LR
-    玩家[玩家 /support] --> API[FastAPI]
-    员工[员工 /support/admin] --> API
-    API --> Agent[LangGraph 客服 Agent]
-    Agent --> Milvus[(Milvus 知识原文、审核状态、切块与向量)]
-    Agent --> Steam[Steam Web API]
-    API --> PG[(PostgreSQL 账号、会话、工单与进度)]
-    API --> MinIO[(MinIO 图片与临时文件)]
-    API --> Redis[(Valkey / Redis 协议队列)]
-    Redis --> Celery[Celery 解析与索引 worker]
-    Celery --> MinIO
-    Celery --> Milvus
-    Celery --> PG
+    player["玩家 /support"] --> api["FastAPI<br/>鉴权与会话边界"]
+    staff["员工 /support/admin"] --> api
+
+    subgraph request["玩家问题与人工接手"]
+        api --> persist["写入玩家消息<br/>读取最近会话"] --> retrieve["LangGraph retrieve<br/>检索已发布资料"]
+        retrieve --> tools["LangGraph tools<br/>知识、工单、Steam 工具"] --> answer["LangGraph answer<br/>结构化回答与 cited_ids"]
+        answer --> decision["来源校验、兜底与转人工判断"] --> reply["保存 AI 回复与引用<br/>工单或事件流通知"]
+    end
+    reply --> player
+    reply --> staff
+
+    subgraph ingestion["员工知识入库"]
+        api --> upload["上传文件或创建正文<br/>记录任务进度"] --> queue["Valkey<br/>Celery 任务队列"]
+        queue --> worker["Celery worker<br/>解析、OCR、切块、关键词、向量"] --> draft["Milvus 草稿索引"]
+        draft --> review["员工复核正文与图片描述"] --> publish["发布后进入玩家检索范围"]
+    end
+
+    pg[("PostgreSQL<br/>账号、消息、工单、反馈、进度")]
+    milvus[("Milvus<br/>原文、审核状态、切块、向量")]
+    minio[("MinIO<br/>临时文件与私有图片")]
+    steam["Steam Web API<br/>公告、归属与成就"]
+    persist <--> pg
+    reply --> pg
+    upload --> pg
+    upload --> minio
+    worker --> minio
+    worker --> pg
+    draft --> milvus
+    publish --> milvus
+    retrieve --> milvus
+    tools --> steam
 ```
 
 | 组件 | 用途 |
