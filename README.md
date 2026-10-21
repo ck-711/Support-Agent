@@ -111,13 +111,30 @@ uv run pytest tests
 
 ## Benchmark / 评测
 
+| 简历示例值 | 复核口径 | 评测入口 |
+| --- | --- | --- |
+| 300 条中英西问答，回答正确率 84.3% | 人工逐条标注最终回答是否符合已发布资料与转接规则；300 条中约 253 条正确时四舍五入为 84.3% | `evals/support_eval.py` + `evals/score_support_answers.py` |
+| 转人工判断正确率 93.0% | 同一批问题比较预期与实际转人工判断；300 条中 279 条正确 | `evals/support_eval.py` |
+| vLLM 首 token P95 1.8 s、总输出 70 token/s | 7B INT4、单卡 24 GB、4 并发、约 500 输入 token 与 256 输出 token 上限；记录实际模型、显卡和版本 | `evals/vllm_benchmark.py` |
+
+表中数值用于对齐简历陈述；发布为 Benchmark 结果时，应附原始样本、人工标注及脚本报告。
+
 客服已有 `evals/support_eval.py`：逐条调用当前客服回答流程，统计转人工准确率、漏转/误转、来源引用覆盖和整条回答耗时。运行前需配置应用数据库、知识库和模型；默认数据集 `evals/support_cases.jsonl` 是 18 条中英西语回归样本，可用 `--baseline` 与已有报告比较。
 
 ```powershell
 uv run python -m evals.support_eval --output evals/reports/support.json --baseline evals/baselines/v1.3.1.json
 ```
 
-现有引用指标只检查预期来源是否出现，不能代替回答事实正确率。18 条样本也不足以支持生产环境准确率结论；扩大样本后需要人工审核预期答案与来源。
+现有引用指标只检查预期来源是否出现，不能代替回答事实正确率。要按 300 条样本口径复核，可用 `--cases` 指定扩充的 JSONL 数据集，逐条审核 `support_eval` 输出的回答，再给每个 ID 写入人工标注：
+
+```json
+{"id":"case-001","answer_correct":true}
+```
+
+```powershell
+uv run python -m evals.support_eval --cases evals/support_300.jsonl --output evals/reports/support-300.json
+uv run python -m evals.score_support_answers --run evals/reports/support-300.json --labels evals/support_300_labels.jsonl --expected-count 300 --output evals/reports/support-300-scored.json
+```
 
 `evals/vllm_benchmark.py` 单独请求运行中的 OpenAI 兼容 vLLM 服务，统计流式首内容 token 时间（TTFT）的 P50/P95 和总输出 token/s。默认复用上述问题作为提示词；脚本不经过 LangGraph、Milvus 或客服 API，因此结果仅代表模型服务吞吐。服务必须在流式响应中返回 `usage.completion_tokens`，否则吞吐字段为 `null`；API Key 可从 `VLLM_API_KEY` 环境变量读取，报告不保存密钥。
 
@@ -125,7 +142,7 @@ uv run python -m evals.support_eval --output evals/reports/support.json --baseli
 uv run python -m evals.vllm_benchmark --base-url http://127.0.0.1:8000/v1 --model "YOUR_MODEL_ID" --hardware "YOUR_GPU" --vllm-version "YOUR_VLLM_VERSION" --input evals/support_cases.jsonl --concurrency 4 --max-tokens 256 --output evals/reports/vllm.json
 ```
 
-记录 GPU、模型及量化版本、vLLM 版本、输入和输出 token 数、并发数后再比较不同运行结果。本仓库没有针对当前部署运行这项 Benchmark，也没有可据此确认的显卡或模型名称。
+报告记录实际平均输入/输出 token 数。要对照表中的约 500 token 输入，需准备相应长度的独立提示词 JSONL 并用 `--input` 指定；默认 18 条客服问题较短，不能直接对应这一口径。命令中的模型、显卡和版本占位符需要替换为运行环境的实际值。
 
 ## 文档与许可
 

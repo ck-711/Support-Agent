@@ -36,6 +36,7 @@ async def run_case(
     async with semaphore:
         started = time.perf_counter()
         first_token_ms = None
+        input_tokens = None
         output_tokens = None
         content = []
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
@@ -54,6 +55,8 @@ async def run_case(
                     continue
                 event = json.loads(payload)
                 usage = event.get("usage")
+                if usage and isinstance(usage.get("prompt_tokens"), int):
+                    input_tokens = usage["prompt_tokens"]
                 if usage and isinstance(usage.get("completion_tokens"), int):
                     output_tokens = usage["completion_tokens"]
                 for choice in event.get("choices") or []:
@@ -67,7 +70,8 @@ async def run_case(
             raise ValueError(f"{case['id']}: model returned no content token")
         return {
             "id": case["id"], "ttft_ms": round(first_token_ms, 2),
-            "elapsed_ms": round(elapsed * 1000, 2), "output_tokens": output_tokens,
+            "elapsed_ms": round(elapsed * 1000, 2),
+            "input_tokens": input_tokens, "output_tokens": output_tokens,
             "output_characters": len("".join(content)),
         }
 
@@ -85,6 +89,7 @@ async def benchmark(args: argparse.Namespace, cases: list[dict[str, str]]) -> di
         ))
         wall_seconds = time.perf_counter() - wall_started
     token_counts = [row["output_tokens"] for row in rows]
+    input_counts = [row["input_tokens"] for row in rows]
     return {
         "model": args.model, "base_url": args.base_url, "concurrency": args.concurrency,
         "hardware": args.hardware, "vllm_version": args.vllm_version,
@@ -94,6 +99,14 @@ async def benchmark(args: argparse.Namespace, cases: list[dict[str, str]]) -> di
             "ttft_p50_ms": round(statistics.median(row["ttft_ms"] for row in rows), 2),
             "ttft_p95_ms": round(p95([row["ttft_ms"] for row in rows]), 2),
             "wall_seconds": round(wall_seconds, 2),
+            "mean_input_tokens": (
+                round(statistics.mean(input_counts), 2)
+                if all(count is not None for count in input_counts) else None
+            ),
+            "mean_output_tokens": (
+                round(statistics.mean(token_counts), 2)
+                if all(count is not None for count in token_counts) else None
+            ),
             "aggregate_output_tokens_per_second": (
                 round(sum(token_counts) / wall_seconds, 2)
                 if all(count is not None for count in token_counts) else None

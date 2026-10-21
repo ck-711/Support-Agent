@@ -93,16 +93,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=Path("support-eval.json"))
     parser.add_argument("--baseline", type=Path, default=None)
+    parser.add_argument("--cases", type=Path, default=CASES_PATH)
     args = parser.parse_args()
     if sys.platform == "win32":
-        rows = asyncio.run(evaluate(load_cases()),
+        rows = asyncio.run(evaluate(load_cases(args.cases)),
                            loop_factory=lambda: asyncio.SelectorEventLoop(selectors.SelectSelector()))
     else:
-        rows = asyncio.run(evaluate(load_cases()))
+        rows = asyncio.run(evaluate(load_cases(args.cases)))
     metrics = summarize(rows)
     report = {"created_at": datetime.now(timezone.utc).isoformat(), "model": settings.DEFAULT_LLM_MODEL,
-              "dataset": "evals/support_cases.jsonl",
-              "dataset_sha256": hashlib.sha256(CASES_PATH.read_bytes()).hexdigest(),
+              "dataset": str(args.cases),
+              "dataset_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(),
               "metrics": metrics, "cases": rows}
     if args.baseline:
         previous = json.loads(args.baseline.read_text(encoding="utf-8"))["metrics"]
