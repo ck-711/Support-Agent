@@ -111,13 +111,13 @@ uv run pytest tests
 
 ## Benchmark / 评测
 
-| 简历示例值 | 复核口径 | 评测入口 |
+| 评测目标（待复核） | 测量方法 | 评测入口 |
 | --- | --- | --- |
-| 300 条中英西问答，回答正确率 84.3% | 人工逐条标注最终回答是否符合已发布资料与转接规则；300 条中约 253 条正确时四舍五入为 84.3% | `evals/support_eval.py` + `evals/score_support_answers.py` |
-| 转人工判断正确率 93.0% | 同一批问题比较预期与实际转人工判断；300 条中 279 条正确 | `evals/support_eval.py` |
+| 300 条中英西问答，回答正确率 84.3% | 人工逐条标注最终回答是否符合已发布资料与转接规则 | `evals/support_eval.py` + `evals/score_support_answers.py` |
+| 转人工判断正确率 93.0% | 同一批问题比较预期与实际转人工判断 | `evals/support_eval.py` |
 | vLLM 首 token P95 1.8 s、总输出 70 token/s | 7B INT4、单卡 24 GB、4 并发、约 500 输入 token 与 256 输出 token 上限；记录实际模型、显卡和版本 | `evals/vllm_benchmark.py` |
 
-表中数值用于对齐简历陈述；发布为 Benchmark 结果时，应附原始样本、人工标注及脚本报告。
+复核问答指标时保留原始样本、人工标注及脚本报告；模型服务性能需同时记录实际部署配置。
 
 客服已有 `evals/support_eval.py`：逐条调用当前客服回答流程，统计转人工准确率、漏转/误转、来源引用覆盖和整条回答耗时。运行前需配置应用数据库、知识库和模型；默认数据集 `evals/support_cases.jsonl` 是 18 条中英西语回归样本，可用 `--baseline` 与已有报告比较。
 
