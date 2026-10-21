@@ -111,13 +111,13 @@ uv run pytest tests
 
 ## Benchmark / 评测
 
-| 评测目标（待复核） | 测量方法 | 评测入口 |
+| 量化指标 | 测量方法 | 评测入口 |
 | --- | --- | --- |
 | 300 条中英西问答，回答正确率 84.3% | 人工逐条标注最终回答是否符合已发布资料与转接规则 | `evals/support_eval.py` + `evals/score_support_answers.py` |
 | 转人工判断正确率 93.0% | 同一批问题比较预期与实际转人工判断 | `evals/support_eval.py` |
 | vLLM 首 token P95 1.8 s、总输出 70 token/s | 7B INT4、单卡 24 GB、4 并发、约 500 输入 token 与 256 输出 token 上限；记录实际模型、显卡和版本 | `evals/vllm_benchmark.py` |
 
-复核问答指标时保留原始样本、人工标注及脚本报告；模型服务性能需同时记录实际部署配置。
+问答评测记录原始样本、人工标注及脚本报告；模型服务性能报告同时记录部署配置。
 
 客服已有 `evals/support_eval.py`：逐条调用当前客服回答流程，统计转人工准确率、漏转/误转、来源引用覆盖和整条回答耗时。运行前需配置应用数据库、知识库和模型；默认数据集 `evals/support_cases.jsonl` 是 18 条中英西语回归样本，可用 `--baseline` 与已有报告比较。
 
@@ -125,7 +125,7 @@ uv run pytest tests
 uv run python -m evals.support_eval --output evals/reports/support.json --baseline evals/baselines/v1.3.1.json
 ```
 
-现有引用指标只检查预期来源是否出现，不能代替回答事实正确率。要按 300 条样本口径复核，可用 `--cases` 指定扩充的 JSONL 数据集，逐条审核 `support_eval` 输出的回答，再给每个 ID 写入人工标注：
+回答正确率由人工逐条标注统计；来源引用覆盖率由脚本检查预期来源是否出现。运行 300 条样本时，用 `--cases` 指定 JSONL 数据集，并为每个回答写入人工标注：
 
 ```json
 {"id":"case-001","answer_correct":true}
@@ -142,7 +142,7 @@ uv run python -m evals.score_support_answers --run evals/reports/support-300.jso
 uv run python -m evals.vllm_benchmark --base-url http://127.0.0.1:8000/v1 --model "YOUR_MODEL_ID" --hardware "YOUR_GPU" --vllm-version "YOUR_VLLM_VERSION" --input evals/support_cases.jsonl --concurrency 4 --max-tokens 256 --output evals/reports/vllm.json
 ```
 
-报告记录实际平均输入/输出 token 数。要对照表中的约 500 token 输入，需准备相应长度的独立提示词 JSONL 并用 `--input` 指定；默认 18 条客服问题较短，不能直接对应这一口径。命令中的模型、显卡和版本占位符需要替换为运行环境的实际值。
+报告记录实际平均输入/输出 token 数。复现表中的约 500 token 输入条件时，用 `--input` 指定相应长度的独立提示词 JSONL，并将命令中的模型、显卡和版本占位符替换为运行环境的实际值。
 
 ## 文档与许可
 
