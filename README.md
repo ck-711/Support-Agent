@@ -26,28 +26,51 @@
 **玩家问答与人工接手**
 
 ```mermaid
-flowchart LR
-    player["玩家提问"] --> api["FastAPI<br/>鉴权与消息入库"]
-    api --> agent["LangGraph<br/>检索、工具、回答"]
-    agent --> reply["引用核验与保存<br/>必要时转人工"]
-    classDef entry fill:#EAF4FF,stroke:#5B8DEF,color:#17324D;
-    classDef outcome fill:#EAF8F0,stroke:#49A878,color:#184B32;
-    class player entry;
-    class reply outcome;
+sequenceDiagram
+    autonumber
+    actor P as 玩家
+    participant API as FastAPI
+    participant PG as PostgreSQL
+    participant G as LangGraph
+    participant KB as Milvus
+
+    P->>API: 提交问题与当前会话凭证
+    API->>API: 鉴权并确认会话归属
+    API->>PG: 保存玩家消息，读取最近对话
+    API->>G: 传入问题、历史和服务端会话 ID
+    G->>KB: retrieve：检索已发布段落与图片描述
+    KB-->>G: 候选来源与引用 ID
+    G->>G: tools：按需调用知识、工单或 Steam 工具
+    G->>G: answer：组织回答与 cited_ids
+    G-->>API: 回答、引用和转人工判断
+    API->>PG: 保存 AI 消息与引用
+    alt 需要人工接手
+        API->>PG: 创建或更新工单
+    end
+    API-->>P: 回复与会话事件流
 ```
 
 **员工知识入库与审核**
 
 ```mermaid
-flowchart LR
-    staff["员工上传或编辑"] --> storage["MinIO / PostgreSQL<br/>文件与任务进度"]
-    storage --> worker["Valkey + Celery<br/>解析、OCR、切块与向量化"]
-    worker --> draft["Milvus 草稿"]
-    draft --> published["员工复核并发布<br/>进入玩家检索范围"]
-    classDef entry fill:#EAF4FF,stroke:#5B8DEF,color:#17324D;
-    classDef outcome fill:#EAF8F0,stroke:#49A878,color:#184B32;
-    class staff entry;
-    class published outcome;
+sequenceDiagram
+    autonumber
+    actor S as 员工
+    participant API as FastAPI
+    participant Store as MinIO / PostgreSQL
+    participant Worker as Valkey / Celery
+    participant KB as Milvus
+
+    S->>API: 上传文件或编辑正文
+    API->>Store: 保存临时文件与任务进度
+    API->>Worker: 投递解析与索引任务
+    Worker->>Store: 读取原文并更新进度
+    Worker->>Worker: OCR、切块、关键词与向量化
+    Worker->>KB: 写入草稿及切块向量
+    S->>API: 复核正文、来源和图片描述
+    API->>KB: 发布审核通过的知识
+    KB-->>API: 更新可检索状态
+    API-->>S: 返回发布结果
 ```
 
 | 组件 | 用途 |
